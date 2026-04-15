@@ -152,7 +152,6 @@ tr:hover td{background:rgba(0,212,255,.05)}
     <button class="tab" id="tabSesiones">Sesiones</button>
     <button class="tab" id="tabFortigate">FortiGate</button>
     <button class="tab" id="tabVdom">VDOMs</button>
-    <button class="tab" id="tabVpn">VPN IPSec</button>
     <button class="tab" id="tabFirewall">Firewall Data</button>
     <button class="tab" id="tabBw">Bandwidth</button>
     <button class="tab" id="tabStats">System Stats</button>
@@ -212,18 +211,16 @@ tr:hover td{background:rgba(0,212,255,.05)}
             </div>
         </div>
         <div class="vpn-grid" id="vpnSummary"></div>
+        <div class="kpi-grid" id="vpnKPIs" style="margin-top:15px"></div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">VPN IPSec</span></div>
+            <div class="table-wrap" id="vpnTable"><div class="loading">CARGANDO</div></div>
+        </div>
     </div>
     <div class="view" id="vdomView">
         <div class="vdom-selector" id="vdomSelector"></div>
         <div class="vdom-counts" id="vdomCounts"></div>
         <div class="kpi-grid" id="vdomKPIs"></div>
-    </div>
-    <div class="view" id="vpnView">
-        <div class="kpi-grid" id="vpnKPIs"></div>
-        <div class="panel">
-            <div class="panel-header"><span class="panel-title">VPN Tunnels Detail</span></div>
-            <div class="table-wrap" id="vpnTable"><div class="loading">CARGANDO</div></div>
-        </div>
     </div>
     <div class="view" id="sesionesView">
         <div class="kpi-grid" id="sesKPIs"></div>
@@ -269,7 +266,6 @@ document.getElementById('tabResumen').onclick=function(){switchView('resumen')};
 document.getElementById('tabSesiones').onclick=function(){switchView('sesiones')};
 document.getElementById('tabFortigate').onclick=function(){switchView('fortigate')};
 document.getElementById('tabVdom').onclick=function(){switchView('vdom')};
-document.getElementById('tabVpn').onclick=function(){switchView('vpn')};
 document.getElementById('tabFirewall').onclick=function(){switchView('firewall')};
 document.getElementById('tabBw').onclick=function(){switchView('bw')};
 document.getElementById('tabStats').onclick=function(){switchView('stats')};
@@ -281,7 +277,8 @@ document.getElementById('autoRefresh').onchange=function(){
 };
 function startAutoRefresh(){stopAutoRefresh();autoInterval=setInterval(loadData,30000)}
 function stopAutoRefresh(){if(autoInterval){clearInterval(autoInterval);autoInterval=null}}
-var currentSesVdom='root',currentSesRange=0;
+var currentSesVdom='root',currentSesRange=0,currentSesPage=1,sessionPageSize=100;
+var sessionFilters={src:'',dst:'',app:'',country:'',user:'',firewall:''};
 function loadData(){
     fetch('latest.json?ts='+Date.now(),{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
         allData=d;
@@ -289,8 +286,8 @@ function loadData(){
         document.getElementById('lastUpdate').textContent='Ultimo: '+now.toLocaleTimeString('es-ES',{hour12:false});
         renderResumen();
         renderFortiGate();
-        renderVDOMs();
         renderVPN();
+        renderVDOMs();
         renderFirewall();
         renderBandwidth();
         renderSystemStats();
@@ -308,7 +305,7 @@ function switchView(view){
     document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
     document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active')});
     document.getElementById(view+'View').classList.add('active');
-    var tabMap={'resumen':'tabResumen','sesiones':'tabSesiones','fortigate':'tabFortigate','vdom':'tabVdom','vpn':'tabVpn','firewall':'tabFirewall'};
+    var tabMap={'resumen':'tabResumen','sesiones':'tabSesiones','fortigate':'tabFortigate','vdom':'tabVdom','firewall':'tabFirewall'};
     if(tabMap[view])document.getElementById(tabMap[view]).classList.add('active');
 }
 function renderResumen(){
@@ -537,8 +534,9 @@ function selectSesVdom(vdom){
 function renderSesiones(){
     lastSessionsUpdate=Date.now();
     var vdoms=Object.keys(allData.vdoms||{});
-    var btns=vdoms.map(function(v){return'<button class="vdom-btn '+(v===currentSesVdom?'active':'')+'" id="sesVdom_'+v+'">'+v+'</button>';}).join('');
-    document.getElementById('sesVdomSelector').innerHTML=btns;
+    document.getElementById('sesVdomSelector').innerHTML=vdoms.map(function(v){
+        return '<button class="vdom-btn '+(v===currentSesVdom?'active':'')+'" id="sesVdom_'+v+'">'+v+'</button>';
+    }).join('');
     vdoms.forEach(function(v){var btn=document.getElementById('sesVdom_'+v); if(btn) btn.onclick=function(){selectSesVdom(v)};});
 
     var d=allData.vdoms[currentSesVdom]||{};
@@ -555,62 +553,40 @@ function renderSesiones(){
     var cpu=(u.cpu&&u.cpu[0])?u.cpu[0].current||0:0;
     var mem=(u.mem&&u.mem[0])?u.mem[0].current||0:0;
 
-    var totalActiveSes=0,totalSesCount=0;
     function safeCount(v){v=Number(v)||0; return (v<0||v>1000000000)?0:v;}
-    policySessions.forEach(function(p){totalActiveSes+=safeCount(p.active_sessions);totalSesCount+=safeCount(p.session_count);});
+    function joinedNames(list){return (list&&Array.isArray(list))?list.map(function(x){return x.name||x}).join(', '):'-';}
+    function labelFromAddr(name){var a=addrByName[name]; return a?(a.fqdn||a.subnet||a.name||name):name;}
+    function countryFlag(c){c=(c||'').toString().trim(); if(c.length!==2)return c||'-'; var u=c.toUpperCase(); return String.fromCodePoint(127397+u.charCodeAt(0),127397+u.charCodeAt(1));}
+    function clean(v){return (v===undefined||v===null)?'':String(v).toLowerCase();}
+
+    var totalActiveSes=0,totalSesCount=0;
+    policySessions.forEach(function(p){totalActiveSes+=safeCount(p.active_sessions); totalSesCount+=safeCount(p.session_count);});
     document.getElementById('sesKPIs').innerHTML=
         '<div class="kpi cyan"><div class="kpi-label">Active Sessions</div><div class="kpi-value">'+totalActiveSes+'</div></div>'+
         '<div class="kpi green"><div class="kpi-label">Total Sessions</div><div class="kpi-value">'+totalSesCount+'</div></div>'+
         '<div class="kpi purple"><div class="kpi-label">CPU</div><div class="kpi-value">'+cpu+'%</div></div>'+
         '<div class="kpi yellow"><div class="kpi-label">Memory</div><div class="kpi-value">'+mem+'%</div></div>';
 
-    function joinedNames(list){return (list&&Array.isArray(list))?list.map(function(x){return x.name||x}).join(', '):'-';}
-    function addrCountry(label){
-        if(!label||label==='-') return '-';
-        var parts=label.split(', ');
-        var countries=[];
-        parts.forEach(function(p){var a=addrByName[p]; if(a&&a.country&&countries.indexOf(a.country)<0) countries.push(a.country);});
-        return countries.length?countries.join(', '):'-';
-    }
-    function clean(v){return (v===undefined||v===null)?'':String(v).toLowerCase();}
-
+    var fwHost=((allData.system['monitor/system/status']||{}).results||{}).hostname||'FortiGate';
     var rows=policySessions.map(function(p){
         var pol=policies.find(function(x){return x.policyid===p.policyid;})||{};
-        var src=joinedNames(pol.srcaddr);
-        var dst=joinedNames(pol.dstaddr);
-        var svc=joinedNames(pol.service);
-        var proto=svc;
-        var app=(pol['application-list']||pol['application-list']||'-');
-        var appid=app||'-';
-        return {
-            id:p.policyid,
-            policy:pol.name||('- '+p.policyid),
-            src:src,
-            dst:dst,
-            app:app,
-            appid:appid,
-            proto:proto,
-            country:addrCountry(dst),
-            active:p.active_sessions||0,
-            active:safeCount(p.active_sessions),
-            total:safeCount(p.session_count),
-            bytes:safeCount(p.bytes),
-            packets:safeCount(p.packets),
-            hits:safeCount(p.hit_count),
-            srcintf:joinedNames(pol.srcintf),
-            dstintf:joinedNames(pol.dstintf),
-            status:pol.status||'disable'
-        };
+        var src=joinedNames(pol.srcaddr).split(', ').map(labelFromAddr).join(', ');
+        var dst=joinedNames(pol.dstaddr).split(', ').map(labelFromAddr).join(', ');
+        var app=(pol['application-list']||joinedNames(pol.service)||'-');
+        var appid=pol['application-list']||'-';
+        var ctry='-';
+        joinedNames(pol.dstaddr).split(', ').forEach(function(n){var a=addrByName[n]; if(a&&a.country&&ctry==='-') ctry=a.country;});
+        return {origin:src,destination:dst,application:app,appid:appid,country:countryFlag(ctry)+' '+(ctry||'-'),user:(joinedNames(pol.users)!=='-'?joinedNames(pol.users):joinedNames(pol.groups)),firewall:fwHost,active:safeCount(p.active_sessions),total:safeCount(p.session_count),bytes:safeCount(p.bytes),hits:safeCount(p.hit_count)};
     });
 
     rows=rows.filter(function(r){
-        return (!sessionFilters.policy || clean(r.policy).indexOf(clean(sessionFilters.policy))>-1) &&
-               (!sessionFilters.src || clean(r.src).indexOf(clean(sessionFilters.src))>-1) &&
-               (!sessionFilters.dst || clean(r.dst).indexOf(clean(sessionFilters.dst))>-1) &&
-               (!sessionFilters.app || clean(r.app+' '+r.appid).indexOf(clean(sessionFilters.app))>-1) &&
-               (!sessionFilters.proto || clean(r.proto).indexOf(clean(sessionFilters.proto))>-1) &&
-               (!sessionFilters.country || clean(r.country).indexOf(clean(sessionFilters.country))>-1);
-    });
+        return (!sessionFilters.src || clean(r.origin).indexOf(clean(sessionFilters.src))>-1) &&
+               (!sessionFilters.dst || clean(r.destination).indexOf(clean(sessionFilters.dst))>-1) &&
+               (!sessionFilters.app || clean(r.application+' '+r.appid).indexOf(clean(sessionFilters.app))>-1) &&
+               (!sessionFilters.country || clean(r.country).indexOf(clean(sessionFilters.country))>-1) &&
+               (!sessionFilters.user || clean(r.user).indexOf(clean(sessionFilters.user))>-1) &&
+               (!sessionFilters.firewall || clean(r.firewall).indexOf(clean(sessionFilters.firewall))>-1);
+    }).sort(function(a,b){return (b.active-a.active)||(b.total-a.total)||(b.hits-a.hits);});
 
     var totalPages=Math.max(1,Math.ceil(rows.length/sessionPageSize));
     if(currentSesPage>totalPages) currentSesPage=totalPages;
@@ -618,15 +594,14 @@ function renderSesiones(){
     var start=(currentSesPage-1)*sessionPageSize;
     var pageRows=rows.slice(start,start+sessionPageSize);
 
-    var filterHtml='';
-    filterHtml+='<div class="filter-row">';
-    filterHtml+='<input id="sesFilterPolicy" placeholder="Filtrar policy" value="'+(sessionFilters.policy||'')+'">';
-    filterHtml+='<input id="sesFilterSrc" placeholder="Origen (IP/Host)" value="'+(sessionFilters.src||'')+'">';
-    filterHtml+='<input id="sesFilterDst" placeholder="Destino (IP/Host)" value="'+(sessionFilters.dst||'')+'">';
-    filterHtml+='<input id="sesFilterApp" placeholder="App / AppID" value="'+(sessionFilters.app||'')+'">';
-    filterHtml+='<input id="sesFilterProto" placeholder="Protocolo / Puerto" value="'+(sessionFilters.proto||'')+'">';
-    filterHtml+='<input id="sesFilterCountry" placeholder="País destino" value="'+(sessionFilters.country||'')+'">';
-    filterHtml+='</div>';
+    var filterHtml='<div class="filter-row">'+
+        '<input id="sesFilterSrc" placeholder="Origen (IP/Host)" value="'+(sessionFilters.src||'')+'">'+
+        '<input id="sesFilterDst" placeholder="Destino (IP/Host)" value="'+(sessionFilters.dst||'')+'">'+
+        '<input id="sesFilterApp" placeholder="Aplicacion / AppID" value="'+(sessionFilters.app||'')+'">'+
+        '<input id="sesFilterCountry" placeholder="País destino" value="'+(sessionFilters.country||'')+'">'+
+        '<input id="sesFilterUser" placeholder="Usuario" value="'+(sessionFilters.user||'')+'">'+
+        '<input id="sesFilterFirewall" placeholder="Firewall" value="'+(sessionFilters.firewall||'')+'">'+
+        '</div>';
 
     var pager='<div class="pager"><div>Total: '+rows.length+' | Página '+currentSesPage+' de '+totalPages+'</div><div class="nav">';
     pager+='<button '+(currentSesPage===1?'disabled':'')+' onclick="changeSesPage('+(currentSesPage-1)+')">Prev</button>';
@@ -634,36 +609,24 @@ function renderSesiones(){
     pager+='<button '+(currentSesPage===totalPages?'disabled':'')+' onclick="changeSesPage('+(currentSesPage+1)+')">Next</button>';
     pager+='</div></div>';
 
-    var html='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Sessions by Policy</span></div>';
+    var html='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Sessions</span></div>';
     html+='<div style="padding:12px">'+filterHtml+pager;
-    html+='<div style="overflow:visible"><table><thead><tr><th>ID</th><th>Policy</th><th>Src IP/Host</th><th>Dst IP/Host</th><th>App</th><th>AppID</th><th>Proto/Port</th><th>País</th><th>Active</th><th>Total</th></tr></thead><tbody>';
+    html+='<div style="overflow:visible"><table><thead><tr><th>Origen</th><th>Destino</th><th>Aplicacion</th><th>Pais</th><th>Usuario</th><th>Firewall</th><th>Activas</th><th>Total</th><th>Bytes</th><th>Hits</th></tr></thead><tbody>';
     pageRows.forEach(function(r){
-        html+='<tr>'+
-            '<td>'+r.id+'</td>'+
-            '<td><b>'+r.policy+'</b></td>'+
-            '<td>'+r.src+'</td>'+
-            '<td>'+r.dst+'</td>'+
-            '<td>'+r.app+'</td>'+
-            '<td>'+r.appid+'</td>'+
-            '<td>'+r.proto+'</td>'+
-            '<td>'+r.country+'</td>'+
-            '<td style="color:var(--green)"><b>'+r.active+'</b></td>'+
-            '<td>'+r.total+'</td>'+
-        '</tr>';
+        html+='<tr><td><b>'+r.origin+'</b></td><td><b>'+r.destination+'</b></td><td>'+r.application+'<br><span style="color:var(--sub);font-size:.75em">'+r.appid+'</span></td><td>'+r.country+'</td><td>'+(r.user||'-')+'</td><td>'+r.firewall+'</td><td style="color:var(--green)"><b>'+r.active+'</b></td><td>'+r.total+'</td><td>'+formatBytes(r.bytes)+'</td><td>'+formatNum(r.hits)+'</td></tr>';
     });
-    html+='</tbody></table></div>';
-    html+='</div></div>';
+    html+='</tbody></table></div></div>';
     document.getElementById('sesTable').innerHTML=html;
 
-    ['sesFilterPolicy','sesFilterSrc','sesFilterDst','sesFilterApp','sesFilterProto','sesFilterCountry'].forEach(function(id){
+    ['sesFilterSrc','sesFilterDst','sesFilterApp','sesFilterCountry','sesFilterUser','sesFilterFirewall'].forEach(function(id){
         var el=document.getElementById(id);
         if(el) el.oninput=function(){
-            sessionFilters.policy=document.getElementById('sesFilterPolicy').value;
             sessionFilters.src=document.getElementById('sesFilterSrc').value;
             sessionFilters.dst=document.getElementById('sesFilterDst').value;
             sessionFilters.app=document.getElementById('sesFilterApp').value;
-            sessionFilters.proto=document.getElementById('sesFilterProto').value;
             sessionFilters.country=document.getElementById('sesFilterCountry').value;
+            sessionFilters.user=document.getElementById('sesFilterUser').value;
+            sessionFilters.firewall=document.getElementById('sesFilterFirewall').value;
             currentSesPage=1;
             renderSesiones();
         };
