@@ -526,52 +526,47 @@ function renderSesiones(){
     if(u.cpu&&Array.isArray(u.cpu)&&u.cpu[0])cpu=u.cpu[0].current||0;
     if(u.mem&&Array.isArray(u.mem)&&u.mem[0])mem=u.mem[0].current||0;
     
-    document.getElementById('sesKPIs').innerHTML=
-        '<div class="kpi cyan"><div class="kpi-label">CPU</div><div class="kpi-value">'+cpu+'%</div></div>'+
-        '<div class="kpi purple"><div class="kpi-label">Memory</div><div class="kpi-value">'+mem+'%</div></div>'+
-        '<div class="kpi green"><div class="kpi-label">TX Rate</div><div class="kpi-value">'+formatRate(totalTx)+'</div></div>'+
-        '<div class="kpi yellow"><div class="kpi-label">RX Rate</div><div class="kpi-value">'+formatRate(totalRx)+'</div></div>';
-    
-    var vdomCounts='';
-    vdoms.forEach(function(v){
-        var d=allData.vdoms[v]||{};
-        var pol=(d['firewall/policy']&&d['firewall/policy'].results)?d['firewall/policy'].results.length:0;
-        var addr=(d['firewall/address']&&d['firewall/address'].results)?d['firewall/address'].results.length:0;
-        var svc=(d['firewall/service/custom']&&d['firewall/service/custom'].results)?d['firewall/service/custom'].results.length:0;
-        var vpn=(d['vpn.ipsec/phase1-interface']&&d['vpn.ipsec/phase1-interface'].results)?d['vpn.ipsec/phase1-interface'].results.length:0;
-        vdomCounts+='<div class="vdom-count"><div class="vdom-count-label">'+v+'</div><div style="font-size:.7em;color:var(--cyan)">Policies: '+pol+' | Addr: '+addr+' | Svc: '+svc+' | VPN: '+vpn+'</div></div>';
+    var policySesData=allData.vdoms[currentSesVdom]||{};
+    var polSes=policySesData['policy_sessions']||{};
+    var polResults=polSes.results||[];
+    var totalActiveSes=0,totalSesCount=0;
+    polResults.forEach(function(p){
+        totalActiveSes+=p.active_sessions||0;
+        totalSesCount+=p.session_count||0;
     });
-    document.getElementById('sesVdomSelector').innerHTML+=vdomCounts;
+    
+    document.getElementById('sesKPIs').innerHTML=
+        '<div class="kpi cyan"><div class="kpi-label">Active Sessions</div><div class="kpi-value">'+totalActiveSes+'</div></div>'+
+        '<div class="kpi green"><div class="kpi-label">Total Sessions</div><div class="kpi-value">'+totalSesCount+'</div></div>'+
+        '<div class="kpi purple"><div class="kpi-label">CPU</div><div class="kpi-value">'+cpu+'%</div></div>'+
+        '<div class="kpi yellow"><div class="kpi-label">Memory</div><div class="kpi-value">'+mem+'%</div></div>';
     
     var d=allData.vdoms[currentSesVdom]||{};
     var policies=(d['firewall/policy']&&d['firewall/policy'].results)?d['firewall/policy'].results:[];
+    var polSesMap={};
+    polResults.forEach(function(p){polSesMap[p.policyid]=p;});
+    
+    var html='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Sessions by Policy ('+polResults.length+' policies)</span></div>';
+    html+='<div class="table-wrap"><table><thead><tr><th>ID</th><th>Policy Name</th><th>Active</th><th>Total Sess</th><th>Bytes</th><th>Packets</th><th>Hits</th></tr></thead><tbody>';
+    polResults.forEach(function(p){
+        var pol=policies.find(function(x){return x.policyid===p.policyid});
+        var name=pol?(pol.name||pol.policyid):p.policyid;
+        html+='<tr><td>'+p.policyid+'</td><td><b>'+name+'</b></td><td style="color:var(--green)"><b>'+(p.active_sessions||0)+'</b></td><td>'+(p.session_count||0)+'</td><td>'+formatBytes(p.bytes||0)+'</td><td>'+formatNum(p.packets||0)+'</td><td>'+formatNum(p.hit_count||0)+'</td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+    
     var addresses=(d['firewall/address']&&d['firewall/address'].results)?d['firewall/address'].results:[];
     var services=(d['firewall/service/custom']&&d['firewall/service/custom'].results)?d['firewall/service/custom'].results:[];
     
-    var html='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Firewall Policies ('+policies.length+')</span></div>';
+    html+='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Firewall Policies ('+policies.length+')</span></div>';
     html+='<div class="table-wrap"><table><thead><tr><th>ID</th><th>Name</th><th>Src Intf</th><th>Dst Intf</th><th>Src Addr</th><th>Dst Addr</th><th>Service</th><th>Status</th></tr></thead><tbody>';
-    policies.forEach(function(p){
+    policies.slice(0,100).forEach(function(p){
         var srcintf=(p.srcintf&&Array.isArray(p.srcintf))?p.srcintf.map(function(x){return x.name||x}).join(', '):'-';
         var dstintf=(p.dstintf&&Array.isArray(p.dstintf))?p.dstintf.map(function(x){return x.name||x}).join(', '):'-';
         var srcaddr=(p.srcaddr&&Array.isArray(p.srcaddr))?p.srcaddr.map(function(x){return x.name||x}).join(', '):'-';
         var dstaddr=(p.dstaddr&&Array.isArray(p.dstaddr))?p.dstaddr.map(function(x){return x.name||x}).join(', '):'-';
         var svc=(p.service&&Array.isArray(p.service))?p.service.map(function(x){return x.name||x}).join(', '):'-';
         html+='<tr><td>'+p.policyid+'</td><td><b>'+(p.name||'-')+'</b></td><td>'+srcintf+'</td><td>'+dstintf+'</td><td>'+srcaddr+'</td><td>'+dstaddr+'</td><td>'+svc+'</td><td><span class="badge '+(p.status==='enable'?'badge-enable':'badge-disable')+'">'+(p.status||'-')+'</span></td></tr>';
-    });
-    html+='</tbody></table></div></div>';
-    
-    html+='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Addresses ('+addresses.length+')</span></div>';
-    html+='<div class="table-wrap"><table><thead><tr><th>Name</th><th>Type</th><th>IP/Netmask</th><th>Interface</th></tr></thead><tbody>';
-    addresses.forEach(function(a){
-        html+='<tr><td><b>'+(a.name||'-')+'</b></td><td>'+(a.type||'-')+'</td><td>'+(a.subnet||a.fqdn||'-')+'</td><td>'+(a.interface||'-')+'</td></tr>';
-    });
-    html+='</tbody></table></div></div>';
-    
-    html+='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Services ('+services.length+')</span></div>';
-    html+='<div class="table-wrap"><table><thead><tr><th>Name</th><th>Category</th><th>Protocol</th><th>Ports</th></tr></thead><tbody>';
-    services.forEach(function(s){
-        var ports=(s.tcp_portrange||s.udp_portrange||'-');
-        html+='<tr><td><b>'+(s.name||'-')+'</b></td><td>'+(s.category||'-')+'</td><td>'+(s.protocol||'-')+'</td><td>'+ports+'</td></tr>';
     });
     html+='</tbody></table></div></div>';
     
