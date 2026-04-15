@@ -161,6 +161,11 @@ tr:hover td{background:rgba(0,212,255,.05)}
             <div class="kpi purple"><div class="kpi-label">Total VPN</div><div class="kpi-value" id="resVPN">-</div></div>
             <div class="kpi yellow"><div class="kpi-label">VPN Activas</div><div class="kpi-value" id="resVPNActive">-</div></div>
         </div>
+        <div class="kpi-grid">
+            <div class="kpi cyan"><div class="kpi-label">Total TX Rate</div><div class="kpi-value" id="resTxRate">-</div></div>
+            <div class="kpi green"><div class="kpi-label">Total RX Rate</div><div class="kpi-value" id="resRxRate">-</div></div>
+            <div class="kpi purple"><div class="kpi-label">Interfaces Activas</div><div class="kpi-value" id="resIntActive">-</div></div>
+        </div>
         <div class="panel">
             <div class="panel-header"><span class="panel-title">VDOMs</span></div>
             <div class="table-wrap" id="resVdomTable"><div class="loading">CARGANDO</div></div>
@@ -282,6 +287,10 @@ function loadData(){
         renderSystemStats();
     }).catch(function(e){console.error(e)});
 }
+function setText(id, value){
+    var el=document.getElementById(id);
+    if(el) el.textContent=value;
+}
 function switchView(view){
     currentView=view;
     document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
@@ -318,14 +327,14 @@ function renderResumen(){
         });
     }
     
-    document.getElementById('resModel').textContent=s.model||s.model_name||'N/A';
-    document.getElementById('resHost').textContent=s.hostname||'N/A';
-    document.getElementById('resVersion').textContent=st.version||'N/A';
-    document.getElementById('resSerial').textContent=(st.serial||'N/A').substring(0,12);
-    document.getElementById('resVdoms').textContent=vdoms.length;
-    document.getElementById('resPolicies').textContent=totalPolicies;
-    document.getElementById('resVPN').textContent=totalVPN;
-    document.getElementById('resVPNActive').textContent=vpnActive;
+    setText('resModel', s.model||s.model_name||'N/A');
+    setText('resHost', s.hostname||'N/A');
+    setText('resVersion', st.version||'N/A');
+    setText('resSerial', (st.serial||'N/A').substring(0,12));
+    setText('resVdoms', vdoms.length);
+    setText('resPolicies', totalPolicies);
+    setText('resVPN', totalVPN);
+    setText('resVPNActive', vpnActive);
     
     var bw=allData.bandwidth||[];
     var totalTx=0,totalRx=0,activeInt=0;
@@ -335,9 +344,9 @@ function renderResumen(){
         totalTx+=b.tx_rate||0;
         totalRx+=b.rx_rate||0;
     });
-    document.getElementById('resTxRate').textContent=formatRate(totalTx);
-    document.getElementById('resRxRate').textContent=formatRate(totalRx);
-    document.getElementById('resIntActive').textContent=activeInt;
+    setText('resTxRate', formatRate(totalTx));
+    setText('resRxRate', formatRate(totalRx));
+    setText('resIntActive', activeInt);
     
     var html='<table><thead><tr><th>VDOM</th><th>Policies</th><th>Addresses</th><th>VPN Tunnels</th></tr></thead><tbody>';
     vdoms.forEach(function(vdom){
