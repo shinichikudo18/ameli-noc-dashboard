@@ -115,6 +115,16 @@ def save_snapshot():
     for ep in cmdb_endpoints:
         data = fetch(f"{API}/api/v2/cmdb/{ep}?vdom=root")
         snapshot["system"][ep] = data
+
+    wifi_endpoints = [
+        "cmdb/wireless-controller/wtp",
+        "cmdb/wireless-controller/wtp-profile",
+        "cmdb/wireless-controller/ssid-policy",
+    ]
+    snapshot["system"]["wifi"] = {}
+    for ep in wifi_endpoints:
+        data = fetch(f"{API}/api/v2/{ep}?vdom=root")
+        snapshot["system"]["wifi"][ep] = data
     
     snapshot["system"]["vpn_monitor"] = {}
     for ep in ["monitor/vpn/ipsec", "monitor/vpn/ipsec/phase1"]:

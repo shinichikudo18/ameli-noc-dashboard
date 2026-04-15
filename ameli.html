@@ -155,6 +155,7 @@ tr:hover td{background:rgba(0,212,255,.05)}
     <button class="tab active" id="tabResumen">Resumen</button>
     <button class="tab" id="tabSesiones">Sesiones</button>
     <button class="tab" id="tabFortigate">FortiGate</button>
+    <button class="tab" id="tabWifi">WiFi</button>
     <button class="tab" id="tabVdom">VDOMs</button>
     <button class="tab" id="tabFirewall">Firewall Data</button>
     <button class="tab" id="tabBw">Bandwidth</button>
@@ -221,6 +222,21 @@ tr:hover td{background:rgba(0,212,255,.05)}
             <div class="table-wrap" id="vpnTable"><div class="loading">CARGANDO</div></div>
         </div>
     </div>
+    <div class="view" id="wifiView">
+        <div class="kpi-grid" id="wifiKPIs"></div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Access Points</span></div>
+            <div class="table-wrap" id="wifiApTable"><div class="loading">CARGANDO</div></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">WTP Profiles</span></div>
+            <div class="table-wrap" id="wifiProfileTable"><div class="loading">CARGANDO</div></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">SSID Policies</span></div>
+            <div class="table-wrap" id="wifiSsidTable"><div class="loading">CARGANDO</div></div>
+        </div>
+    </div>
     <div class="view" id="vdomView">
         <div class="vdom-selector" id="vdomSelector"></div>
         <div class="vdom-counts" id="vdomCounts"></div>
@@ -269,6 +285,7 @@ document.getElementById('refreshBtn').onclick=loadData;
 document.getElementById('tabResumen').onclick=function(){switchView('resumen')};
 document.getElementById('tabSesiones').onclick=function(){switchView('sesiones')};
 document.getElementById('tabFortigate').onclick=function(){switchView('fortigate')};
+document.getElementById('tabWifi').onclick=function(){switchView('wifi')};
 document.getElementById('tabVdom').onclick=function(){switchView('vdom')};
 document.getElementById('tabFirewall').onclick=function(){switchView('firewall')};
 document.getElementById('tabBw').onclick=function(){switchView('bw')};
@@ -291,6 +308,7 @@ function loadData(){
         renderResumen();
         renderFortiGate();
         renderVPN();
+        renderWifi();
         renderVDOMs();
         renderFirewall();
         renderBandwidth();
@@ -309,7 +327,7 @@ function switchView(view){
     document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
     document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active')});
     document.getElementById(view+'View').classList.add('active');
-    var tabMap={'resumen':'tabResumen','sesiones':'tabSesiones','fortigate':'tabFortigate','vdom':'tabVdom','firewall':'tabFirewall'};
+    var tabMap={'resumen':'tabResumen','sesiones':'tabSesiones','fortigate':'tabFortigate','wifi':'tabWifi','vdom':'tabVdom','firewall':'tabFirewall'};
     if(tabMap[view])document.getElementById(tabMap[view]).classList.add('active');
 }
 function renderResumen(){
@@ -679,6 +697,85 @@ function renderVPN(){
     });
     html+='</tbody></table>';
     document.getElementById('vpnTable').innerHTML=html;
+}
+function renderWifi(){
+    var wifi=allData.system['wifi']||{};
+    var wtps=((wifi['cmdb/wireless-controller/wtp']||{}).results)||[];
+    var profiles=((wifi['cmdb/wireless-controller/wtp-profile']||{}).results)||[];
+    var ssids=((wifi['cmdb/wireless-controller/ssid-policy']||{}).results)||[];
+
+    var apCount=wtps.length;
+    var profileCount=profiles.length;
+    var ssidCount=ssids.length;
+    var maxClients=0;
+    wtps.forEach(function(ap){maxClients+=Number(ap['max-clients']||ap.max_clients||0)||0;});
+
+    document.getElementById('wifiKPIs').innerHTML=
+        '<div class="kpi cyan"><div class="kpi-label">Access Points</div><div class="kpi-value">'+formatNum(apCount)+'</div></div>'+
+        '<div class="kpi green"><div class="kpi-label">WTP Profiles</div><div class="kpi-value">'+formatNum(profileCount)+'</div></div>'+
+        '<div class="kpi purple"><div class="kpi-label">SSID Policies</div><div class="kpi-value">'+formatNum(ssidCount)+'</div></div>'+
+        '<div class="kpi yellow"><div class="kpi-label">Max Clients</div><div class="kpi-value">'+formatNum(maxClients)+'</div></div>';
+
+    var apHtml='<table><thead><tr><th>Name</th><th>WTP ID</th><th>Profile</th><th>Mode</th><th>Location</th><th>Region</th><th>Admin</th><th>WAN Mode</th><th>Max Clients</th><th>Handoff RSSI</th></tr></thead><tbody>';
+    if(!wtps.length){
+        apHtml+='<tr><td colspan="10">Sin access points reportados por la API</td></tr>';
+    }else{
+        wtps.forEach(function(ap){
+            apHtml+='<tr>'+
+                '<td><b>'+(ap.name||'-')+'</b></td>'+
+                '<td>'+(ap['wtp-id']||'-')+'</td>'+
+                '<td>'+(ap['wtp-profile']||'-')+'</td>'+
+                '<td>'+(ap['wtp-mode']||'-')+'</td>'+
+                '<td>'+(ap.location||'-')+'</td>'+
+                '<td>'+(ap.region||'-')+'</td>'+
+                '<td><span class="badge '+(ap.admin==='enable'?'badge-enable':'badge-disable')+'">'+(ap.admin||'-')+'</span></td>'+
+                '<td>'+(ap['wan-port-mode']||'-')+'</td>'+
+                '<td>'+(ap['max-clients']!==undefined?ap['max-clients']:'-')+'</td>'+
+                '<td>'+(ap['handoff-rssi']!==undefined?ap['handoff-rssi']:'-')+'</td>'+
+            '</tr>';
+        });
+    }
+    apHtml+='</tbody></table>';
+    document.getElementById('wifiApTable').innerHTML=apHtml;
+
+    var profHtml='<table><thead><tr><th>Name</th><th>Platform</th><th>Mesh</th><th>LAN</th><th>WAN</th><th>DTLS</th><th>Max Clients</th><th>Handoff RSSI</th></tr></thead><tbody>';
+    if(!profiles.length){
+        profHtml+='<tr><td colspan="8">Sin perfiles WTP</td></tr>';
+    }else{
+        profiles.forEach(function(p){
+            var plat=(p.platform||{});
+            profHtml+='<tr>'+
+                '<td><b>'+(p.name||'-')+'</b></td>'+
+                '<td>'+(plat.type||'-')+' / '+(plat.mode||'-')+'</td>'+
+                '<td>'+(p['apcfg-mesh']||'-')+'</td>'+
+                '<td>'+(p.lan?JSON.stringify(p.lan).slice(0,60):'-')+'</td>'+ 
+                '<td>'+(p['wan-port-mode']||'-')+'</td>'+
+                '<td>'+(p['dtls-policy']||'-')+'</td>'+
+                '<td>'+(p['max-clients']!==undefined?p['max-clients']:'-')+'</td>'+
+                '<td>'+(p['handoff-rssi']!==undefined?p['handoff-rssi']:'-')+'</td>'+
+            '</tr>';
+        });
+    }
+    profHtml+='</tbody></table>';
+    document.getElementById('wifiProfileTable').innerHTML=profHtml;
+
+    var ssidHtml='<table><thead><tr><th>Name</th><th>VLAN</th><th>Traffic Mode</th><th>Security</th><th>Hidden</th><th>Status</th></tr></thead><tbody>';
+    if(!ssids.length){
+        ssidHtml+='<tr><td colspan="6">Sin SSID policies expuestas por la API</td></tr>';
+    }else{
+        ssids.forEach(function(s){
+            ssidHtml+='<tr>'+
+                '<td><b>'+(s.name||'-')+'</b></td>'+
+                '<td>'+(s.vlanid||s.vlan||'-')+'</td>'+
+                '<td>'+(s['traffic-mode']||s['forward-traffic']||'-')+'</td>'+
+                '<td>'+(s.security||s.auth||'-')+'</td>'+
+                '<td>'+(s.hidden==='enable'?'yes':'no')+'</td>'+
+                '<td><span class="badge '+(s.status==='enable'?'badge-enable':'badge-disable')+'">'+(s.status||'-')+'</span></td>'+
+            '</tr>';
+        });
+    }
+    ssidHtml+='</tbody></table>';
+    document.getElementById('wifiSsidTable').innerHTML=ssidHtml;
 }
 function formatBytes(b){if(!b)return'0 B';var e=Math.floor(Math.log(b)/Math.log(1024));return(b/Math.pow(1024,e)).toFixed(1)+' '+['B','KB','MB','GB'][e];}
 function renderFirewall(){
