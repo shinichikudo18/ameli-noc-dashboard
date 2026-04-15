@@ -261,7 +261,7 @@ tr:hover td{background:rgba(0,212,255,.05)}
     </div>
 </div>
 <script>
-var allData={},currentView='fortigate',currentVdom='root',currentCategory='',autoInterval=null;
+var allData={},currentView='fortigate',currentVdom='root',currentCategory='',autoInterval=null,lastSessionsUpdate=0;
 function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('es-ES',{hour12:false})}
 setInterval(updateClock,1000);updateClock();
 document.getElementById('refreshBtn').onclick=loadData;
@@ -288,13 +288,15 @@ function loadData(){
         var now=new Date();
         document.getElementById('lastUpdate').textContent='Ultimo: '+now.toLocaleTimeString('es-ES',{hour12:false});
         renderResumen();
-        renderSesiones();
         renderFortiGate();
         renderVDOMs();
         renderVPN();
         renderFirewall();
         renderBandwidth();
         renderSystemStats();
+        if(currentView==='sesiones' || !lastSessionsUpdate || (Date.now()-lastSessionsUpdate)>=60000){
+            renderSesiones();
+        }
     }).catch(function(e){console.error(e)});
 }
 function setText(id, value){
@@ -533,6 +535,7 @@ function selectSesVdom(vdom){
     renderSesiones();
 }
 function renderSesiones(){
+    lastSessionsUpdate=Date.now();
     var vdoms=Object.keys(allData.vdoms||{});
     var btns=vdoms.map(function(v){return'<button class="vdom-btn '+(v===currentSesVdom?'active':'')+'" id="sesVdom_'+v+'">'+v+'</button>';}).join('');
     document.getElementById('sesVdomSelector').innerHTML=btns;
