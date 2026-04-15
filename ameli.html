@@ -273,7 +273,7 @@ function startAutoRefresh(){stopAutoRefresh();autoInterval=setInterval(loadData,
 function stopAutoRefresh(){if(autoInterval){clearInterval(autoInterval);autoInterval=null}}
 var currentSesVdom='root',currentSesRange=0;
 function loadData(){
-    fetch('latest.json').then(function(r){return r.json()}).then(function(d){
+    fetch('latest.json?ts='+Date.now(),{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
         allData=d;
         var now=new Date();
         document.getElementById('lastUpdate').textContent='Ultimo: '+now.toLocaleTimeString('es-ES',{hour12:false});
