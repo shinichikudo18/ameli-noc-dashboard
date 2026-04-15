@@ -108,6 +108,18 @@ tr:hover td{background:rgba(0,212,255,.05)}
 .bw-tx-bar{background:linear-gradient(90deg,var(--cyan),#00ff88);height:100%;transition:width .3s}
 .bw-rx-bar{background:linear-gradient(90deg,var(--purple),#ff88ff);height:100%;transition:width .3s}
 .bw-bar-label{font-size:.7em;color:var(--sub);margin-top:3px}
+.graph-container{background:var(--card);border-radius:8px;padding:15px;margin-bottom:15px}
+.graph-title{font-size:1em;color:var(--cyan);margin-bottom:10px}
+.graph-row{display:flex;align-items:center;margin-bottom:8px}
+.graph-label{width:80px;font-size:.8em;color:var(--sub)}
+.graph-bar-bg{flex:1;height:16px;background:var(--bg);border-radius:4px;overflow:hidden;position:relative}
+.graph-bar{height:100%;border-radius:4px;transition:width .5s}
+.graph-value{width:80px;text-align:right;font-size:.8em;color:var(--cyan)}
+.cpu-bar{background:linear-gradient(90deg,var(--cyan),var(--green))}
+.mem-bar{background:linear-gradient(90deg,var(--purple),#ff88ff)}
+.historical-list{display:flex;gap:5px;margin-top:10px;flex-wrap:wrap}
+.hist-point{flex:1;min-width:40px;height:30px;background:var(--bg);border-radius:4px;position:relative}
+.hist-point::after{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:var(--cyan);width:8px;border-radius:2px;transition:height .3s}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.5}}
 .bw-active{animation:blink 1s infinite}
 </style></head><body>
@@ -132,6 +144,7 @@ tr:hover td{background:rgba(0,212,255,.05)}
     <button class="tab" id="tabVpn">VPN IPSec</button>
     <button class="tab" id="tabFirewall">Firewall Data</button>
     <button class="tab" id="tabBw">Bandwidth</button>
+    <button class="tab" id="tabStats">System Stats</button>
 </div>
 <div class="content">
     <div class="view active" id="resumenView">
@@ -218,6 +231,10 @@ tr:hover td{background:rgba(0,212,255,.05)}
         <div class="kpi-grid" id="bwKPIs"></div>
         <div id="bwInterfaces"></div>
     </div>
+    <div class="view" id="statsView">
+        <div class="kpi-grid" id="statsKPIs"></div>
+        <div id="statsCharts"></div>
+    </div>
 </div>
 <div class="footer">AMELI NOC/SOC Dashboard | AMELI-EEPA-Dashboard | Retencion: 60 dias</div>
 <div class="modal" id="faceplateModal">
@@ -239,6 +256,7 @@ document.getElementById('tabVdom').onclick=function(){switchView('vdom')};
 document.getElementById('tabVpn').onclick=function(){switchView('vpn')};
 document.getElementById('tabFirewall').onclick=function(){switchView('firewall')};
 document.getElementById('tabBw').onclick=function(){switchView('bw')};
+document.getElementById('tabStats').onclick=function(){switchView('stats')};
 document.getElementById('faceplateBtn').onclick=showFaceplate;
 document.getElementById('closeFaceplate').onclick=hideFaceplate;
 document.getElementById('searchInput').onkeyup=filterTable;
@@ -259,6 +277,8 @@ function loadData(){
         renderVDOMs();
         renderVPN();
         renderFirewall();
+        renderBandwidth();
+        renderSystemStats();
     }).catch(function(e){console.error(e)});
 }
 function switchView(view){
@@ -634,10 +654,10 @@ function renderBandwidth(){
     document.getElementById('bwKPIs').innerHTML=
         '<div class="kpi cyan"><div class="kpi-label">Total TX Rate</div><div class="kpi-value">'+formatRate(totalTx)+'</div></div>'+
         '<div class="kpi green"><div class="kpi-label">Total RX Rate</div><div class="kpi-value">'+formatRate(totalRx)+'</div></div>'+
-        '<div class="kpi purple"><div class="kpi-label">Interfaces Activas</div><div class="kpi-value">'+bw.filter(function(b){return(b.tx_rate||0)+(b.rx_rate||0)>0}).length+'</div></div>';
+        '<div class="kpi purple"><div class="kpi-label">Interfaces</div><div class="kpi-value">'+bw.length+'</div></div>';
     var maxRate=Math.max(...bw.map(function(b){return Math.max(b.tx_rate||0,b.rx_rate||0)}),1);
     var html='';
-    bw.forEach(function(b){
+    bw.slice(0,20).forEach(function(b){
         var txP=Math.min(((b.tx_rate||0)/maxRate)*100,100);
         var rxP=Math.min(((b.rx_rate||0)/maxRate)*100,100);
         var isActive=(b.tx_rate||0)+(b.rx_rate||0)>0;
@@ -648,6 +668,50 @@ function renderBandwidth(){
             '<div class="bw-bar-label">TX: '+formatBytes(b.tx_bytes||0)+' | RX: '+formatBytes(b.rx_bytes||0)+'</div></div>';
     });
     document.getElementById('bwInterfaces').innerHTML=html||'<div class="loading">Sin datos de bandwidth</div>';
+}
+function renderSystemStats(){
+    var u=allData.system['monitor/system/resource/usage'].results||{};
+    var cpuData=u.cpu&&u.cpu[0]?u.cpu[0]:{};
+    var memData=u.mem&&u.mem[0]?u.mem[0]:{};
+    var cpu=parseInt(cpuData.current||0);
+    var mem=parseInt(memData.current||0);
+    var s=allData.system['monitor/system/status'].results||{};
+    var sessions=s.sessions||{};
+    
+    var hist1m=cpuData.historical&&cpuData.historical['1-min']?cpuData.historical['1-min'].values:[];
+    var memHist1m=memData.historical&&memData.historical['1-min']?memData.historical['1-min'].values:[];
+    
+    var maxHistVal=Math.max(...hist1m.map(function(v){return v[1]||0}),100);
+    var maxMemVal=100;
+    
+    var cpuBars='';
+    hist1m.slice(-20).forEach(function(v){
+        var h=Math.max(2,((v[1]||0)/maxHistVal)*40);
+        cpuBars+='<div class="hist-point" style="height:40px"><div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:10px;background:var(--cyan);border-radius:2px;height:'+h+'px"></div></div>';
+    });
+    
+    var memBars='';
+    memHist1m.slice(-20).forEach(function(v){
+        var h=Math.max(2,((v[1]||0)/maxMemVal)*40);
+        memBars+='<div class="hist-point" style="height:40px"><div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:10px;background:var(--purple);border-radius:2px;height:'+h+'px"></div></div>';
+    });
+    
+    document.getElementById('statsKPIs').innerHTML=
+        '<div class="kpi cyan"><div class="kpi-label">CPU Usage</div><div class="kpi-value">'+cpu+'%</div></div>'+
+        '<div class="kpi purple"><div class="kpi-label">Memory</div><div class="kpi-value">'+mem+'%</div></div>'+
+        '<div class="kpi green"><div class="kpi-label">Uptime</div><div class="kpi-value">'+(s.uptime||'N/A')+'</div></div>';
+    
+    document.getElementById('statsCharts').innerHTML=
+        '<div class="graph-container">'+
+            '<div class="graph-title">CPU Usage (1 min)</div>'+
+            '<div class="graph-row"><div class="graph-label">Usage</div><div class="graph-bar-bg"><div class="graph-bar cpu-bar" style="width:'+cpu+'%"></div></div><div class="graph-value">'+cpu+'%</div></div>'+
+            '<div style="display:flex;gap:3px;margin-top:15px">'+cpuBars+'</div>'+
+        '</div>'+
+        '<div class="graph-container">'+
+            '<div class="graph-title">Memory Usage (1 min)</div>'+
+            '<div class="graph-row"><div class="graph-label">Usage</div><div class="graph-bar-bg"><div class="graph-bar mem-bar" style="width:'+mem+'%"></div></div><div class="graph-value">'+mem+'%</div></div>'+
+            '<div style="display:flex;gap:3px;margin-top:15px">'+memBars+'</div>'+
+        '</div>';
 }
 loadData();
 startAutoRefresh();
