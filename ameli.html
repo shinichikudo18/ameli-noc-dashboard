@@ -326,6 +326,18 @@ function renderResumen(){
     document.getElementById('resVPN').textContent=totalVPN;
     document.getElementById('resVPNActive').textContent=vpnActive;
     
+    var bw=allData.bandwidth||[];
+    var totalTx=0,totalRx=0,activeInt=0;
+    bw.forEach(function(b){
+        var rate=(b.tx_rate||0)+(b.rx_rate||0);
+        if(rate>0)activeInt++;
+        totalTx+=b.tx_rate||0;
+        totalRx+=b.rx_rate||0;
+    });
+    document.getElementById('resTxRate').textContent=formatRate(totalTx);
+    document.getElementById('resRxRate').textContent=formatRate(totalRx);
+    document.getElementById('resIntActive').textContent=activeInt;
+    
     var html='<table><thead><tr><th>VDOM</th><th>Policies</th><th>Addresses</th><th>VPN Tunnels</th></tr></thead><tbody>';
     vdoms.forEach(function(vdom){
         var d=allData.vdoms[vdom];
@@ -344,6 +356,10 @@ function renderFortiGate(){
     var iObj=allData.system['monitor/system/interface'].results||{};
     var ha=allData.system['monitor/system/ha-status']||{};
     var st=allData.system['monitor/system/status'];
+    var bwData=allData.bandwidth||[];
+    var bwMap={};
+    bwData.forEach(function(b){bwMap[b.name||b.Name||'']=b});
+    
     var i=Object.keys(iObj).map(function(k){return iObj[k]});
     
     document.getElementById('fgModel').textContent=s.model||s.model_name||'N/A';
@@ -374,18 +390,22 @@ function renderFortiGate(){
     var html='';
     i.slice(0,12).forEach(function(iface){
         var up=iface.link===true;
-        var tx=formatBytes(iface.tx_bytes||iface.transmit_bytes||0);
-        var rx=formatBytes(iface.rx_bytes||iface.receive_bytes||0);
-        html+='<div class="port '+(up?'up':'down')+'"><div class="port-name">'+(iface.name||iface.id||'N/A')+'</div><div class="port-status '+(up?'up':'down')+'">'+(up?'UP':'DOWN')+'</div><div style="font-size:.6em;color:var(--cyan);margin-top:4px">TX:'+tx+' | RX:'+rx+'</div></div>';
+        var name=iface.name||iface.id||'N/A';
+        var bw=bwMap[name]||{};
+        var txRate=formatRate(bw.tx_rate||0);
+        var rxRate=formatRate(bw.rx_rate||0);
+        html+='<div class="port '+(up?'up':'down')+'"><div class="port-name">'+name+'</div><div class="port-status '+(up?'up':'down')+'">'+(up?'UP':'DOWN')+'</div><div style="font-size:.6em;color:var(--cyan);margin-top:4px">TX: '+txRate+'</div><div style="font-size:.6em;color:var(--green);margin-top:2px">RX: '+rxRate+'</div></div>';
     });
     document.getElementById('interfaceGrid').innerHTML=html||'<div style="color:var(--sub);grid-column:1/-1;text-align:center">Sin datos</div>';
     
     var modalHtml='';
     i.forEach(function(iface){
         var up=iface.link===true;
-        var tx=formatBytes(iface.tx_bytes||iface.transmit_bytes||0);
-        var rx=formatBytes(iface.rx_bytes||iface.receive_bytes||0);
-        modalHtml+='<div class="port '+(up?'up':'down')+'" style="padding:12px"><div class="port-name">'+(iface.name||iface.id||'N/A')+'</div><div class="port-status '+(up?'up':'down')+'">'+(up?'UP':'DOWN')+'</div><div style="font-size:.7em;color:var(--sub);margin-top:5px">IP: '+(iface.ip||'-')+' | '+(iface.speed||'-')+' Mbps</div><div style="font-size:.7em;color:var(--cyan);margin-top:4px">TX: '+tx+' | RX: '+rx+'</div></div>';
+        var name=iface.name||iface.id||'N/A';
+        var bw=bwMap[name]||{};
+        var txRate=formatRate(bw.tx_rate||0);
+        var rxRate=formatRate(bw.rx_rate||0);
+        modalHtml+='<div class="port '+(up?'up':'down')+'" style="padding:12px"><div class="port-name">'+name+'</div><div class="port-status '+(up?'up':'down')+'">'+(up?'UP':'DOWN')+'</div><div style="font-size:.7em;color:var(--sub);margin-top:5px">IP: '+(iface.ip||'-')+' | '+(iface.speed||'-')+' Mbps</div><div style="font-size:.8em;color:var(--cyan);margin-top:4px">TX: '+txRate+'</div><div style="font-size:.8em;color:var(--green);margin-top:2px">RX: '+rxRate+'</div></div>';
     });
     document.getElementById('modalInterfaces').innerHTML=modalHtml||'<div style="color:var(--sub)">Sin datos</div>';
     
