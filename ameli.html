@@ -87,6 +87,13 @@ body{font-family:Segoe UI,Arial;background:var(--bg);color:var(--txt);min-height
 .panel-title{font-size:.85em;color:var(--cyan);text-transform:uppercase}
 .search{margin:15px 0}
 .search input{width:100%;padding:10px 15px;background:var(--card);border:1px solid #374151;border-radius:4px;color:var(--txt)}
+.filter-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:10px 0}
+.filter-row input,.filter-row select{width:100%;padding:8px 10px;background:var(--bg);border:1px solid #374151;border-radius:4px;color:var(--txt);font-size:.8em}
+.pager{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 0;color:var(--sub);font-size:.8em;flex-wrap:wrap}
+.pager .nav{display:flex;gap:6px;flex-wrap:wrap}
+.pager button{background:var(--card);border:1px solid #374151;color:var(--txt);padding:6px 10px;border-radius:4px;cursor:pointer}
+.pager button:hover{border-color:var(--cyan);color:var(--cyan)}
+.pager button.active{background:var(--cyan);color:var(--bg);border-color:var(--cyan)}
 .table-wrap{max-height:500px;overflow-y:auto}
 table{width:100%;border-collapse:collapse;font-size:.85em}
 th{background:var(--card);color:var(--cyan);padding:10px;text-align:left;font-size:.75em;text-transform:uppercase;border-bottom:1px solid #374151}
@@ -515,72 +522,146 @@ function renderVDOMDetail(){
         '<div class="kpi purple"><div class="kpi-label">VPN Phase1</div><div class="kpi-value">'+vpn+'</div></div>'+
         '<div class="kpi yellow"><div class="kpi-label">VIPs</div><div class="kpi-value">'+vips+'</div></div>';
 }
-var currentSesVdom='root',currentSesRange=0;
+var currentSesVdom='root',currentSesRange=0,currentSesPage=1,sessionPageSize=100;
+var sessionFilters={policy:'',src:'',dst:'',app:'',proto:'',country:''};
+function selectSesVdom(vdom){
+    currentSesVdom=vdom;
+    currentSesPage=1;
+    renderSesiones();
+}
 function renderSesiones(){
     var vdoms=Object.keys(allData.vdoms||{});
-    var btns=vdoms.map(function(v){
-        return'<button class="vdom-btn '+(v===currentSesVdom?'active':'')+'" id="sesVdom_'+v+'">'+v+'</button>';
-    }).join('');
+    var btns=vdoms.map(function(v){return'<button class="vdom-btn '+(v===currentSesVdom?'active':'')+'" id="sesVdom_'+v+'">'+v+'</button>';}).join('');
     document.getElementById('sesVdomSelector').innerHTML=btns;
-    vdoms.forEach(function(v){
-        document.getElementById('sesVdom_'+v).onclick=function(){selectSesVdom(v)};
-    });
-    
+    vdoms.forEach(function(v){var btn=document.getElementById('sesVdom_'+v); if(btn) btn.onclick=function(){selectSesVdom(v)};});
+
+    var d=allData.vdoms[currentSesVdom]||{};
+    var policies=(d['firewall/policy']&&d['firewall/policy'].results)?d['firewall/policy'].results:[];
+    var policySessions=(d['policy_sessions']&&d['policy_sessions'].results)?d['policy_sessions'].results:[];
+    var addresses=(d['firewall/address']&&d['firewall/address'].results)?d['firewall/address'].results:[];
+    var addrByName={};
+    addresses.forEach(function(a){addrByName[a.name]=a;});
+
     var bw=allData.bandwidth||[];
     var totalTx=0,totalRx=0;
     bw.forEach(function(b){totalTx+=b.tx_rate||0;totalRx+=b.rx_rate||0});
-    
     var u=allData.system['monitor/system/resource/usage'].results||{};
-    var cpu=0,mem=0;
-    if(u.cpu&&Array.isArray(u.cpu)&&u.cpu[0])cpu=u.cpu[0].current||0;
-    if(u.mem&&Array.isArray(u.mem)&&u.mem[0])mem=u.mem[0].current||0;
-    
-    var policySesData=allData.vdoms[currentSesVdom]||{};
-    var polSes=policySesData['policy_sessions']||{};
-    var polResults=polSes.results||[];
+    var cpu=(u.cpu&&u.cpu[0])?u.cpu[0].current||0:0;
+    var mem=(u.mem&&u.mem[0])?u.mem[0].current||0:0;
+
     var totalActiveSes=0,totalSesCount=0;
-    polResults.forEach(function(p){
-        totalActiveSes+=p.active_sessions||0;
-        totalSesCount+=p.session_count||0;
-    });
-    
+    policySessions.forEach(function(p){totalActiveSes+=p.active_sessions||0;totalSesCount+=p.session_count||0;});
     document.getElementById('sesKPIs').innerHTML=
         '<div class="kpi cyan"><div class="kpi-label">Active Sessions</div><div class="kpi-value">'+totalActiveSes+'</div></div>'+
         '<div class="kpi green"><div class="kpi-label">Total Sessions</div><div class="kpi-value">'+totalSesCount+'</div></div>'+
         '<div class="kpi purple"><div class="kpi-label">CPU</div><div class="kpi-value">'+cpu+'%</div></div>'+
         '<div class="kpi yellow"><div class="kpi-label">Memory</div><div class="kpi-value">'+mem+'%</div></div>';
-    
-    var d=allData.vdoms[currentSesVdom]||{};
-    var policies=(d['firewall/policy']&&d['firewall/policy'].results)?d['firewall/policy'].results:[];
-    var polSesMap={};
-    polResults.forEach(function(p){polSesMap[p.policyid]=p;});
-    
-    var html='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Sessions by Policy ('+polResults.length+' policies)</span></div>';
-    html+='<div class="table-wrap"><table><thead><tr><th>ID</th><th>Policy Name</th><th>Active</th><th>Total Sess</th><th>Bytes</th><th>Packets</th><th>Hits</th></tr></thead><tbody>';
-    polResults.forEach(function(p){
-        var pol=policies.find(function(x){return x.policyid===p.policyid});
-        var name=pol?(pol.name||pol.policyid):p.policyid;
-        html+='<tr><td>'+p.policyid+'</td><td><b>'+name+'</b></td><td style="color:var(--green)"><b>'+(p.active_sessions||0)+'</b></td><td>'+(p.session_count||0)+'</td><td>'+formatBytes(p.bytes||0)+'</td><td>'+formatNum(p.packets||0)+'</td><td>'+formatNum(p.hit_count||0)+'</td></tr>';
+
+    function joinedNames(list){return (list&&Array.isArray(list))?list.map(function(x){return x.name||x}).join(', '):'-';}
+    function addrCountry(label){
+        if(!label||label==='-') return '-';
+        var parts=label.split(', ');
+        var countries=[];
+        parts.forEach(function(p){var a=addrByName[p]; if(a&&a.country&&countries.indexOf(a.country)<0) countries.push(a.country);});
+        return countries.length?countries.join(', '):'-';
+    }
+    function clean(v){return (v===undefined||v===null)?'':String(v).toLowerCase();}
+
+    var rows=policySessions.map(function(p){
+        var pol=policies.find(function(x){return x.policyid===p.policyid;})||{};
+        var src=joinedNames(pol.srcaddr);
+        var dst=joinedNames(pol.dstaddr);
+        var svc=joinedNames(pol.service);
+        var proto=svc;
+        var app=(pol['application-list']||pol['application-list']||'-');
+        var appid=app||'-';
+        return {
+            id:p.policyid,
+            policy:pol.name||('- '+p.policyid),
+            src:src,
+            dst:dst,
+            app:app,
+            appid:appid,
+            proto:proto,
+            country:addrCountry(dst),
+            active:p.active_sessions||0,
+            total:p.session_count||0,
+            bytes:p.bytes||0,
+            packets:p.packets||0,
+            hits:p.hit_count||0,
+            srcintf:joinedNames(pol.srcintf),
+            dstintf:joinedNames(pol.dstintf),
+            status:pol.status||'disable'
+        };
     });
-    html+='</tbody></table></div></div>';
-    
-    var addresses=(d['firewall/address']&&d['firewall/address'].results)?d['firewall/address'].results:[];
-    var services=(d['firewall/service/custom']&&d['firewall/service/custom'].results)?d['firewall/service/custom'].results:[];
-    
-    html+='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Firewall Policies ('+policies.length+')</span></div>';
-    html+='<div class="table-wrap"><table><thead><tr><th>ID</th><th>Name</th><th>Src Intf</th><th>Dst Intf</th><th>Src Addr</th><th>Dst Addr</th><th>Service</th><th>Status</th></tr></thead><tbody>';
-    policies.slice(0,100).forEach(function(p){
-        var srcintf=(p.srcintf&&Array.isArray(p.srcintf))?p.srcintf.map(function(x){return x.name||x}).join(', '):'-';
-        var dstintf=(p.dstintf&&Array.isArray(p.dstintf))?p.dstintf.map(function(x){return x.name||x}).join(', '):'-';
-        var srcaddr=(p.srcaddr&&Array.isArray(p.srcaddr))?p.srcaddr.map(function(x){return x.name||x}).join(', '):'-';
-        var dstaddr=(p.dstaddr&&Array.isArray(p.dstaddr))?p.dstaddr.map(function(x){return x.name||x}).join(', '):'-';
-        var svc=(p.service&&Array.isArray(p.service))?p.service.map(function(x){return x.name||x}).join(', '):'-';
-        html+='<tr><td>'+p.policyid+'</td><td><b>'+(p.name||'-')+'</b></td><td>'+srcintf+'</td><td>'+dstintf+'</td><td>'+srcaddr+'</td><td>'+dstaddr+'</td><td>'+svc+'</td><td><span class="badge '+(p.status==='enable'?'badge-enable':'badge-disable')+'">'+(p.status||'-')+'</span></td></tr>';
+
+    rows=rows.filter(function(r){
+        return (!sessionFilters.policy || clean(r.policy).indexOf(clean(sessionFilters.policy))>-1) &&
+               (!sessionFilters.src || clean(r.src).indexOf(clean(sessionFilters.src))>-1) &&
+               (!sessionFilters.dst || clean(r.dst).indexOf(clean(sessionFilters.dst))>-1) &&
+               (!sessionFilters.app || clean(r.app+' '+r.appid).indexOf(clean(sessionFilters.app))>-1) &&
+               (!sessionFilters.proto || clean(r.proto).indexOf(clean(sessionFilters.proto))>-1) &&
+               (!sessionFilters.country || clean(r.country).indexOf(clean(sessionFilters.country))>-1);
     });
-    html+='</tbody></table></div></div>';
-    
+
+    var totalPages=Math.max(1,Math.ceil(rows.length/sessionPageSize));
+    if(currentSesPage>totalPages) currentSesPage=totalPages;
+    if(currentSesPage<1) currentSesPage=1;
+    var start=(currentSesPage-1)*sessionPageSize;
+    var pageRows=rows.slice(start,start+sessionPageSize);
+
+    var filterHtml='';
+    filterHtml+='<div class="filter-row">';
+    filterHtml+='<input id="sesFilterPolicy" placeholder="Filtrar policy" value="'+(sessionFilters.policy||'')+'">';
+    filterHtml+='<input id="sesFilterSrc" placeholder="Origen (IP/Host)" value="'+(sessionFilters.src||'')+'">';
+    filterHtml+='<input id="sesFilterDst" placeholder="Destino (IP/Host)" value="'+(sessionFilters.dst||'')+'">';
+    filterHtml+='<input id="sesFilterApp" placeholder="App / AppID" value="'+(sessionFilters.app||'')+'">';
+    filterHtml+='<input id="sesFilterProto" placeholder="Protocolo / Puerto" value="'+(sessionFilters.proto||'')+'">';
+    filterHtml+='<input id="sesFilterCountry" placeholder="País destino" value="'+(sessionFilters.country||'')+'">';
+    filterHtml+='</div>';
+
+    var pager='<div class="pager"><div>Total: '+rows.length+' | Página '+currentSesPage+' de '+totalPages+'</div><div class="nav">';
+    pager+='<button '+(currentSesPage===1?'disabled':'')+' onclick="changeSesPage('+(currentSesPage-1)+')">Prev</button>';
+    for(var p=1;p<=Math.min(totalPages,8);p++) pager+='<button class="'+(p===currentSesPage?'active':'')+'" onclick="changeSesPage('+p+')">'+p+'</button>';
+    pager+='<button '+(currentSesPage===totalPages?'disabled':'')+' onclick="changeSesPage('+(currentSesPage+1)+')">Next</button>';
+    pager+='</div></div>';
+
+    var html='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Sessions by Policy</span></div>';
+    html+='<div style="padding:12px">'+filterHtml+pager;
+    html+='<div class="table-wrap"><table><thead><tr><th>ID</th><th>Policy</th><th>Src IP/Host</th><th>Dst IP/Host</th><th>App</th><th>AppID</th><th>Proto/Port</th><th>País</th><th>Active</th><th>Total</th></tr></thead><tbody>';
+    pageRows.forEach(function(r){
+        html+='<tr>'+
+            '<td>'+r.id+'</td>'+
+            '<td><b>'+r.policy+'</b></td>'+
+            '<td>'+r.src+'</td>'+
+            '<td>'+r.dst+'</td>'+
+            '<td>'+r.app+'</td>'+
+            '<td>'+r.appid+'</td>'+
+            '<td>'+r.proto+'</td>'+
+            '<td>'+r.country+'</td>'+
+            '<td style="color:var(--green)"><b>'+r.active+'</b></td>'+
+            '<td>'+r.total+'</td>'+
+        '</tr>';
+    });
+    html+='</tbody></table></div>';
+    html+='</div></div>';
     document.getElementById('sesTable').innerHTML=html;
+
+    ['sesFilterPolicy','sesFilterSrc','sesFilterDst','sesFilterApp','sesFilterProto','sesFilterCountry'].forEach(function(id){
+        var el=document.getElementById(id);
+        if(el) el.oninput=function(){
+            sessionFilters.policy=document.getElementById('sesFilterPolicy').value;
+            sessionFilters.src=document.getElementById('sesFilterSrc').value;
+            sessionFilters.dst=document.getElementById('sesFilterDst').value;
+            sessionFilters.app=document.getElementById('sesFilterApp').value;
+            sessionFilters.proto=document.getElementById('sesFilterProto').value;
+            sessionFilters.country=document.getElementById('sesFilterCountry').value;
+            currentSesPage=1;
+            renderSesiones();
+        };
+    });
 }
+function changeSesPage(page){currentSesPage=page;renderSesiones();}
 function renderVPN(){
     var vpnMon=allData.system['vpn_monitor']||{};
     var monData=vpnMon['monitor/vpn/ipsec']||{};
