@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>AMELI NOC/SOC</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0a0e17;--panel:#111827;--card:#1f2937;--cyan:#00d4ff;--green:#00ff88;--red:#ff3366;--yellow:#ffaa00;--txt:#f3f4f6;--sub:#9ca3af;--purple:#a855f7}
+body{font-family:Segoe UI,Arial;background:var(--bg);color:var(--txt);min-height:100vh}
+.scanlines{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.1) 0,rgba(0,0,0,.1) 1px,transparent 1px,transparent 2px);z-index:1000;opacity:.3}
+.header{background:linear-gradient(180deg,rgba(17,24,39,.95),rgba(17,24,39,.8));padding:15px 25px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--cyan)}
+.logo{font-size:1.4em;font-weight:600;color:var(--cyan);text-shadow:0 0 10px var(--cyan)}
+.pulse{width:10px;height:10px;background:var(--green);border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 5px var(--green);opacity:1}50%{box-shadow:0 0 20px var(--green);opacity:.5}}
+.clock{font-size:1.2em;color:var(--cyan)}
+.auto-refresh{font-size:.8em;color:var(--sub);display:flex;align-items:center;gap:8px}
+.auto-refresh input{cursor:pointer}
+.tabs{padding:15px;display:flex;gap:5px}
+.tab{background:var(--card);border:1px solid #374151;color:var(--sub);padding:12px 24px;cursor:pointer;border-radius:4px}
+.tab:hover{border-color:var(--cyan);color:var(--cyan)}
+.tab.active{background:var(--cyan);color:var(--bg)}
+.content{padding:0 15px 15px}
+.view{display:none}
+.view.active{display:block}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.info,.face{background:var(--panel);border:1px solid #374151;border-radius:8px;padding:20px}
+.model{font-size:2em;color:var(--cyan);text-shadow:0 0 20px rgba(0,212,255,.5);margin-bottom:10px}
+.hostname{font-size:1.2em;margin-bottom:20px}
+.details{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-top:20px}
+.detail{background:var(--card);padding:15px;border-radius:8px}
+.detail-label{font-size:.75em;color:var(--sub);text-transform:uppercase;margin-bottom:5px}
+.detail-value{font-size:1.1em;color:var(--cyan)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-top:20px}
+.stat{background:var(--card);padding:15px;border-radius:8px;text-align:center}
+.stat-label{font-size:.75em;color:var(--sub);text-transform:uppercase;margin-bottom:5px}
+.stat-value{font-size:1.5em}
+.stat-bar{height:6px;background:var(--bg);border-radius:3px;margin-top:8px;overflow:hidden}
+.stat-fill{height:100%;border-radius:3px;transition:width .5s;background:var(--cyan)}
+.btn{background:var(--cyan);border:none;color:var(--bg);padding:12px 24px;border-radius:4px;cursor:pointer;font-size:.9em}
+.btn:hover{background:#00b8d4}
+.ports{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.port{background:var(--card);border:1px solid #374151;border-radius:4px;padding:8px;text-align:center;font-size:.7em}
+.port.up{border-color:var(--green);box-shadow:0 0 10px rgba(0,255,136,.3)}
+.port.down{border-color:var(--red);opacity:.5}
+.port-name{color:var(--txt);margin-bottom:4px}
+.port-status{font-size:.8em}
+.port-status.up{color:var(--green)}
+.port-status.down{color:var(--red)}
+.modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.9);z-index:2000;align-items:center;justify-content:center}
+.modal.show{display:flex}
+.modal-content{background:var(--panel);border:2px solid var(--cyan);border-radius:12px;padding:30px;max-width:900px;width:90%;max-height:90vh;overflow-y:auto}
+.modal-close{float:right;background:none;border:none;color:var(--txt);font-size:1.5em;cursor:pointer}
+.vdom-selector{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.vdom-btn{background:var(--card);border:2px solid #374151;color:var(--sub);padding:15px 25px;cursor:pointer;font-size:1em;border-radius:8px}
+.vdom-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.vdom-btn.active{background:var(--cyan);color:var(--bg);border-color:var(--cyan)}
+.vdom-counts{display:flex;gap:15px;flex-wrap:wrap;margin-bottom:20px}
+.vdom-count{background:var(--card);padding:15px 20px;border-radius:8px;border-left:4px solid var(--cyan)}
+.vdom-count-label{font-size:.75em;color:var(--sub);text-transform:uppercase}
+.vdom-count-value{font-size:1.5em;color:var(--cyan)}
+.vpn-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-top:20px}
+.vpn-card{background:var(--card);padding:15px;border-radius:8px;border-left:4px solid}
+.vpn-card.up{border-color:var(--green)}
+.vpn-card.down{border-color:var(--red)}
+.vpn-name{font-size:1em;color:var(--txt);margin-bottom:5px}
+.vpn-status{font-size:.8em}
+.vpn-status.up{color:var(--green)}
+.vpn-status.down{color:var(--red)}
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:15px;margin-bottom:20px}
+.kpi{background:var(--panel);border:1px solid #374151;border-radius:8px;padding:20px;position:relative}
+.kpi::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%}
+.kpi.green::before{background:var(--green)}
+.kpi.cyan::before{background:var(--cyan)}
+.kpi.purple::before{background:var(--purple)}
+.kpi.yellow::before{background:var(--yellow)}
+.kpi-label{font-size:.75em;color:var(--sub);text-transform:uppercase;margin-bottom:10px}
+.kpi-value{font-size:2.5em;font-weight:600}
+.kpi.green .kpi-value{color:var(--green)}
+.kpi.cyan .kpi-value{color:var(--cyan)}
+.kpi.purple .kpi-value{color:var(--purple)}
+.kpi.yellow .kpi-value{color:var(--yellow)}
+.cat-tabs{display:flex;gap:5px;flex-wrap:wrap;margin-top:15px}
+.cat-btn{background:var(--card);border:1px solid #374151;color:var(--sub);padding:8px 16px;cursor:pointer;font-size:.8em;border-radius:4px}
+.cat-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.cat-btn.active{background:var(--cyan);color:var(--bg)}
+.panel{background:var(--panel);border:1px solid #374151;border-radius:8px;overflow:hidden;margin-top:15px}
+.panel-header{padding:12px 15px;background:var(--card);border-bottom:1px solid #374151;display:flex;justify-content:space-between;align-items:center}
+.panel-title{font-size:.85em;color:var(--cyan);text-transform:uppercase}
+.search{margin:15px 0}
+.search input{width:100%;padding:10px 15px;background:var(--card);border:1px solid #374151;border-radius:4px;color:var(--txt)}
+.table-wrap{max-height:400px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:.85em}
+th{background:var(--card);color:var(--cyan);padding:10px;text-align:left;font-size:.75em;text-transform:uppercase;border-bottom:1px solid #374151}
+td{padding:8px 10px;border-bottom:1px solid rgba(55,65,81,.5);color:var(--sub)}
+tr:hover td{background:rgba(0,212,255,.05)}
+.badge{display:inline-block;padding:3px 8px;border-radius:3px;font-size:.75em}
+.badge-enable{background:rgba(0,255,136,.2);color:var(--green)}
+.badge-disable{background:rgba(255,51,102,.2);color:var(--red)}
+.badge-accept{background:rgba(0,255,136,.2);color:var(--green)}
+.badge-deny{background:rgba(255,51,102,.2);color:var(--red)}
+.footer{text-align:center;padding:15px;color:var(--sub);font-size:.75em;border-top:1px solid #374151;margin-top:20px}
+.loading{text-align:center;padding:50px;color:var(--cyan)}
+.uptime{color:var(--green)}
+</style></head><body>
+<div class="scanlines"></div>
+<div class="header">
+    <div class="logo">AMELI NOC/SOC</div>
+    <div style="display:flex;align-items:center;gap:20px">
+        <span class="clock" id="clock"></span>
+        <span class="auto-refresh">
+            <input type="checkbox" id="autoRefresh" checked>
+            <label for="autoRefresh">Auto (30s)</label>
+        </span>
+        <button class="btn" style="margin:0;padding:8px 16px" id="refreshBtn">REFRESH</button>
+        <span style="color:var(--sub);font-size:.8em" id="lastUpdate"></span>
+    </div>
+</div>
+<div class="tabs">
+    <button class="tab active" id="tabResumen">Resumen</button>
+    <button class="tab" id="tabSesiones">Sesiones</button>
+    <button class="tab" id="tabFortigate">FortiGate</button>
+    <button class="tab" id="tabVdom">VDOMs</button>
+    <button class="tab" id="tabVpn">VPN IPSec</button>
+    <button class="tab" id="tabFirewall">Firewall Data</button>
+</div>
+<div class="content">
+    <div class="view active" id="resumenView">
+        <div class="kpi-grid">
+            <div class="kpi cyan"><div class="kpi-label">Modelo</div><div class="kpi-value" id="resModel">-</div></div>
+            <div class="kpi cyan"><div class="kpi-label">Hostname</div><div class="kpi-value" id="resHost">-</div></div>
+            <div class="kpi green"><div class="kpi-label">Version</div><div class="kpi-value" id="resVersion">-</div></div>
+            <div class="kpi green"><div class="kpi-label">Serial</div><div class="kpi-value" id="resSerial">-</div></div>
+        </div>
+        <div class="kpi-grid">
+            <div class="kpi cyan"><div class="kpi-label">VDOMs</div><div class="kpi-value" id="resVdoms">-</div></div>
+            <div class="kpi green"><div class="kpi-label">Total Policies</div><div class="kpi-value" id="resPolicies">-</div></div>
+            <div class="kpi purple"><div class="kpi-label">Total VPN</div><div class="kpi-value" id="resVPN">-</div></div>
+            <div class="kpi yellow"><div class="kpi-label">VPN Activas</div><div class="kpi-value" id="resVPNActive">-</div></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">VDOMs</span></div>
+            <div class="table-wrap" id="resVdomTable"><div class="loading">CARGANDO</div></div>
+        </div>
+    </div>
+    <div class="view" id="fortigateView">
+<div class="grid">
+            <div class="info">
+                <div class="model" id="fgModel">-</div>
+                <div class="hostname" id="fgHostname">-</div>
+                <div class="details">
+                    <div class="detail"><div class="detail-label">Serial</div><div class="detail-value" id="fgSerial">-</div></div>
+                    <div class="detail"><div class="detail-label">Firmware</div><div class="detail-value" id="fgVersion">-</div></div>
+                    <div class="detail"><div class="detail-label">Build</div><div class="detail-value" id="fgBuild">-</div></div>
+                    <div class="detail"><div class="detail-label">HA Mode</div><div class="detail-value" id="fgHA">-</div></div>
+                </div>
+                <div class="stats">
+                    <div class="stat"><div class="stat-label">CPU</div><div class="stat-value" id="fgCPU">0%</div><div class="stat-bar"><div class="stat-fill" id="cpuBar"></div></div></div>
+                    <div class="stat"><div class="stat-label">Memory</div><div class="stat-value" id="fgRAM">0%</div><div class="stat-bar"><div class="stat-fill" id="ramBar" style="background:var(--purple)"></div></div></div>
+                    <div class="stat"><div class="stat-label">Sessions</div><div class="stat-value" id="fgSessions">0</div><div class="stat-bar"><div class="stat-fill" id="sessionBar" style="background:var(--green)"></div></div></div>
+                </div>
+                <button class="btn" id="faceplateBtn" style="margin-top:10px;width:100%;font-size:.8em">Interfaces</button>
+                <div id="interfacePanel" style="display:none;margin-top:10px">
+                    <div id="allInterfaces" class="ports"></div>
+                </div>
+            </div>
+            <div class="face">
+                <div style="text-align:center">
+                    <img id="fgImage" src="https://www.fortinet.com/content/dam/fortinet/assets/images/product-landing-page/fgt-200f-series/fgt-200f-series-400.png" style="max-width:100%;max-height:180px;border-radius:8px" onerror="this.style.display='none'">
+                </div>
+                <div style="text-align:center;font-size:.8em;color:var(--cyan);margin-top:8px" id="fgModelImg">FG200F</div>
+                <div style="text-align:center;font-size:.7em;color:var(--sub)" id="fgHostImg">FG200F-Primary</div>
+                <div id="interfaceGrid" class="ports" style="margin-top:10px"></div>
+            </div>
+        </div>
+        <div class="vpn-grid" id="vpnSummary"></div>
+    </div>
+    <div class="view" id="vdomView">
+        <div class="vdom-selector" id="vdomSelector"></div>
+        <div class="vdom-counts" id="vdomCounts"></div>
+        <div class="kpi-grid" id="vdomKPIs"></div>
+    </div>
+    <div class="view" id="vpnView">
+        <div class="kpi-grid" id="vpnKPIs"></div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">VPN Tunnels Detail</span></div>
+            <div class="table-wrap" id="vpnTable"><div class="loading">CARGANDO</div></div>
+        </div>
+    </div>
+    <div class="view" id="sesionesView">
+        <div class="kpi-grid" id="sesKPIs"></div>
+        <div class="vdom-selector" id="sesVdomSelector"></div>
+        <div class="tabs-container" id="sesRangeSelector" style="margin-top:15px"></div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Sesiones</span></div>
+            <div class="table-wrap" id="sesTable"><div class="loading">CARGANDO</div></div>
+        </div>
+    </div>
+    <div class="view" id="firewallView">
+        <div class="vdom-selector" id="fwVdomSelector"></div>
+        <div class="cat-tabs" id="categoryTabs"></div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Data Explorer</span></div>
+            <div class="search"><input type="text" id="searchInput" placeholder="Buscar..."></div>
+            <div class="table-wrap" id="tableContainer"><div class="loading">CARGANDO</div></div>
+        </div>
+    </div>
+</div>
+<div class="footer">AMELI NOC/SOC Dashboard | AMELI-EEPA-Dashboard | Retencion: 60 dias</div>
+<div class="modal" id="faceplateModal">
+    <div class="modal-content">
+        <button class="modal-close" id="closeFaceplate">x</button>
+        <h2 style="color:var(--cyan);margin-bottom:20px">FORTIGATE INTERFACES</h2>
+        <div id="modalInterfaces" class="ports"></div>
+    </div>
+</div>
+<script>
+var allData={},currentView='fortigate',currentVdom='root',currentCategory='',autoInterval=null;
+function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('es-ES',{hour12:false})}
+setInterval(updateClock,1000);updateClock();
+document.getElementById('refreshBtn').onclick=loadData;
+document.getElementById('tabResumen').onclick=function(){switchView('resumen')};
+document.getElementById('tabSesiones').onclick=function(){switchView('sesiones')};
+document.getElementById('tabFortigate').onclick=function(){switchView('fortigate')};
+document.getElementById('tabVdom').onclick=function(){switchView('vdom')};
+document.getElementById('tabVpn').onclick=function(){switchView('vpn')};
+document.getElementById('tabFirewall').onclick=function(){switchView('firewall')};
+document.getElementById('faceplateBtn').onclick=showFaceplate;
+document.getElementById('closeFaceplate').onclick=hideFaceplate;
+document.getElementById('searchInput').onkeyup=filterTable;
+document.getElementById('autoRefresh').onchange=function(){
+    if(this.checked){startAutoRefresh()}else{stopAutoRefresh()}
+};
+function startAutoRefresh(){stopAutoRefresh();autoInterval=setInterval(loadData,30000)}
+function stopAutoRefresh(){if(autoInterval){clearInterval(autoInterval);autoInterval=null}}
+var currentSesVdom='root',currentSesRange=0;
+function loadData(){
+    fetch('latest.json').then(function(r){return r.json()}).then(function(d){
+        allData=d;
+        var now=new Date();
+        document.getElementById('lastUpdate').textContent='Ultimo: '+now.toLocaleTimeString('es-ES',{hour12:false});
+        renderResumen();
+        renderSesiones();
+        renderFortiGate();
+        renderVDOMs();
+        renderVPN();
+        renderFirewall();
+    }).catch(function(e){console.error(e)});
+}
+function switchView(view){
+    currentView=view;
+    document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
+    document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active')});
+    document.getElementById(view+'View').classList.add('active');
+    var tabMap={'resumen':'tabResumen','sesiones':'tabSesiones','fortigate':'tabFortigate','vdom':'tabVdom','vpn':'tabVpn','firewall':'tabFirewall'};
+    if(tabMap[view])document.getElementById(tabMap[view]).classList.add('active');
+}
+function renderResumen(){
+    var s=allData.system['monitor/system/status'].results||{};
+    var st=allData.system['monitor/system/status'];
+    var vdoms=Object.keys(allData.vdoms||{});
+    
+    var totalPolicies=0;
+    var totalVPN=0;
+    var vpnActive=0;
+    
+    vdoms.forEach(function(vdom){
+        var d=allData.vdoms[vdom];
+        if(d['firewall/policy']&&d['firewall/policy'].results)totalPolicies+=d['firewall/policy'].results.length;
+    });
+    
+    var vpnMon=allData.system['vpn_monitor']||{};
+    var monData=vpnMon['monitor/vpn/ipsec']||{};
+    var monResults=monData.results||[];
+    if(Array.isArray(monResults)){
+        totalVPN=monResults.length;
+        monResults.forEach(function(t){
+            if(t.proxyid&&Array.isArray(t.proxyid)){
+                t.proxyid.forEach(function(p){
+                    if(p.status==='up')vpnActive++;
+                });
+            }
+        });
+    }
+    
+    document.getElementById('resModel').textContent=s.model||s.model_name||'N/A';
+    document.getElementById('resHost').textContent=s.hostname||'N/A';
+    document.getElementById('resVersion').textContent=st.version||'N/A';
+    document.getElementById('resSerial').textContent=(st.serial||'N/A').substring(0,12);
+    document.getElementById('resVdoms').textContent=vdoms.length;
+    document.getElementById('resPolicies').textContent=totalPolicies;
+    document.getElementById('resVPN').textContent=totalVPN;
+    document.getElementById('resVPNActive').textContent=vpnActive;
+    
+    var html='<table><thead><tr><th>VDOM</th><th>Policies</th><th>Addresses</th><th>VPN Tunnels</th></tr></thead><tbody>';
+    vdoms.forEach(function(vdom){
+        var d=allData.vdoms[vdom];
+        var pol=(d['firewall/policy']&&d['firewall/policy'].results)?d['firewall/policy'].results.length:0;
+        var addr=(d['firewall/address']&&d['firewall/address'].results)?d['firewall/address'].results.length:0;
+        var vpn=(d['vpn.ipsec/phase1-interface']&&d['vpn.ipsec/phase1-interface'].results)?d['vpn.ipsec/phase1-interface'].results.length:0;
+        html+='<tr><td><b>'+vdom+'</b></td><td>'+pol+'</td><td>'+addr+'</td><td>'+vpn+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    document.getElementById('resVdomTable').innerHTML=html;
+}
+
+function renderFortiGate(){
+    var s=allData.system['monitor/system/status'].results||{};
+    var u=allData.system['monitor/system/resource/usage'].results||{};
+    var iObj=allData.system['monitor/system/interface'].results||{};
+    var ha=allData.system['monitor/system/ha-status']||{};
+    var st=allData.system['monitor/system/status'];
+    var i=Object.keys(iObj).map(function(k){return iObj[k]});
+    
+    document.getElementById('fgModel').textContent=s.model||s.model_name||'N/A';
+    document.getElementById('fgHostname').textContent=s.hostname||'N/A';
+    document.getElementById('fgSerial').textContent=st.serial||'N/A';
+    document.getElementById('fgVersion').textContent=st.version||'N/A';
+    document.getElementById('fgBuild').textContent=st.build||'N/A';
+    var haConfig=allData.system['system/ha']||{};
+    var haMode=haConfig.results?haConfig.results.mode:'N/A';
+    var modeText={'a-p':'Active-Passive','a-a':'Active-Active','standalone':'Standalone'};
+    document.getElementById('fgHA').textContent=modeText[haMode]||haMode;
+    document.getElementById('fgModelImg').textContent=s.model_number||s.model||'FG200F';
+    document.getElementById('fgHostImg').textContent=s.hostname||'N/A';
+    
+    var cpu=0,mem=0;
+    if(u.cpu&&Array.isArray(u.cpu)&&u.cpu.length>0)cpu=u.cpu[0].current||0;
+    if(u.mem&&Array.isArray(u.mem)&&u.mem.length>0)mem=u.mem[0].current||0;
+    var sess=u.sessions?u.sessions.current:0;
+    var sessMax=u.sessions?u.sessions.max:100000;
+    
+    document.getElementById('fgCPU').textContent=cpu+'%';
+    document.getElementById('fgRAM').textContent=mem+'%';
+    document.getElementById('fgSessions').textContent=formatNum(sess);
+    document.getElementById('cpuBar').style.width=cpu+'%';
+    document.getElementById('ramBar').style.width=mem+'%';
+    document.getElementById('sessionBar').style.width=Math.min((sess/sessMax)*100,100)+'%';
+    
+    var html='';
+    i.slice(0,12).forEach(function(iface){
+        var up=iface.link===true;
+        var tx=formatBytes(iface.tx_bytes||iface.transmit_bytes||0);
+        var rx=formatBytes(iface.rx_bytes||iface.receive_bytes||0);
+        html+='<div class="port '+(up?'up':'down')+'"><div class="port-name">'+(iface.name||iface.id||'N/A')+'</div><div class="port-status '+(up?'up':'down')+'">'+(up?'UP':'DOWN')+'</div><div style="font-size:.6em;color:var(--cyan);margin-top:4px">TX:'+tx+' | RX:'+rx+'</div></div>';
+    });
+    document.getElementById('interfaceGrid').innerHTML=html||'<div style="color:var(--sub);grid-column:1/-1;text-align:center">Sin datos</div>';
+    
+    var modalHtml='';
+    i.forEach(function(iface){
+        var up=iface.link===true;
+        var tx=formatBytes(iface.tx_bytes||iface.transmit_bytes||0);
+        var rx=formatBytes(iface.rx_bytes||iface.receive_bytes||0);
+        modalHtml+='<div class="port '+(up?'up':'down')+'" style="padding:12px"><div class="port-name">'+(iface.name||iface.id||'N/A')+'</div><div class="port-status '+(up?'up':'down')+'">'+(up?'UP':'DOWN')+'</div><div style="font-size:.7em;color:var(--sub);margin-top:5px">IP: '+(iface.ip||'-')+' | '+(iface.speed||'-')+' Mbps</div><div style="font-size:.7em;color:var(--cyan);margin-top:4px">TX: '+tx+' | RX: '+rx+'</div></div>';
+    });
+    document.getElementById('modalInterfaces').innerHTML=modalHtml||'<div style="color:var(--sub)">Sin datos</div>';
+    
+    renderVPNSummary();
+}
+function renderVPNSummary(){
+    var vpns=[];
+    Object.keys(allData.vdoms).forEach(function(vdom){
+        var phase1=allData.vdoms[vdom]['vpn.ipsec/phase1-interface'];
+        if(phase1&&phase1.results&&Array.isArray(phase1.results)){
+            phase1.results.forEach(function(p1){
+                vpns.push({name:p1.name,vdom:vdom,status:p1.status==='up'?'up':'down',phase1:p1});
+            });
+        }
+    });
+    var upCount=vpns.filter(function(v){return v.status==='up'}).length;
+    var downCount=vpns.filter(function(v){return v.status==='down'}).length;
+    document.getElementById('vpnSummary').innerHTML=
+        '<div class="vpn-card '+(upCount>0?'up':'down')+'"><div class="vpn-name">VPN Tunnels</div><div class="vpn-status '+(upCount>0?'up':'down')+'">UP: '+upCount+' | DOWN: '+downCount+'</div></div>'+
+        '<div class="vpn-card up"><div class="vpn-name">Active</div><div class="vpn-status up">'+upCount+'</div></div>'+
+        '<div class="vpn-card down"><div class="vpn-name">Inactive</div><div class="vpn-status down">'+downCount+'</div></div>';
+}
+var faceplateVisible=false;
+function showFaceplate(){
+    faceplateVisible=!faceplateVisible;
+    var panel=document.getElementById('interfacePanel');
+    var btn=document.getElementById('faceplateBtn');
+    if(faceplateVisible){
+        panel.style.display='block';
+        btn.textContent='Ocultar interfaces';
+        var iObj=allData.system['monitor/system/interface'].results||{};
+        var i=Object.keys(iObj).map(function(k){return iObj[k]});
+        var html='';
+        i.forEach(function(iface){
+            var up=iface.link===true;
+            var tx=formatBytes(iface.tx_bytes||iface.transmit_bytes||0);
+            var rx=formatBytes(iface.rx_bytes||iface.receive_bytes||0);
+            html+='<div class="port '+(up?'up':'down')+'" style="padding:6px"><div class="port-name">'+(iface.name||iface.id||'N/A')+'</div><div class="port-status '+(up?'up':'down')+'">'+(up?'UP':'DOWN')+'</div><div style="font-size:.6em;color:var(--sub)">IP: '+(iface.ip||'-')+'</div><div style="font-size:.6em;color:var(--cyan)">TX:'+tx+' | RX:'+rx+'</div></div>';
+        });
+        document.getElementById('allInterfaces').innerHTML=html;
+    }else{
+        panel.style.display='none';
+        btn.textContent='Interfaces';
+    }
+}
+function hideFaceplate(){}
+function renderVDOMs(){
+    var vdoms=Object.keys(allData.vdoms||{});
+    var btns=vdoms.map(function(v){
+        return'<button class="vdom-btn '+(v===currentVdom?'active':'')+'" id="vdom_'+v+'">'+v+'</button>';
+    }).join('');
+    document.getElementById('vdomSelector').innerHTML=btns;
+    document.getElementById('fwVdomSelector').innerHTML=btns;
+    vdoms.forEach(function(v){
+        document.getElementById('vdom_'+v).onclick=function(){selectVdom(v)};
+    });
+    renderVDOMDetail();
+}
+function selectVdom(vdom){
+    currentVdom=vdom;
+    document.querySelectorAll('.vdom-btn').forEach(function(b){b.classList.remove('active')});
+    document.getElementById('vdom_'+vdom).classList.add('active');
+    renderVDOMDetail();
+    if(currentView==='firewall'){currentCategory='';renderFirewall();}
+}
+function renderVDOMDetail(){
+    var d=allData.vdoms[currentVdom]||{};
+    var pol=(d['firewall/policy']&&d['firewall/policy'].results)?d['firewall/policy'].results.length:0;
+    var addr=(d['firewall/address']&&d['firewall/address'].results)?d['firewall/address'].results.length:0;
+    var svc=(d['firewall/service/custom']&&d['firewall/service/custom'].results)?d['firewall/service/custom'].results.length:0;
+    var vpn=(d['vpn.ipsec/phase1-interface']&&d['vpn.ipsec/phase1-interface'].results)?d['vpn.ipsec/phase1-interface'].results.length:0;
+    var routes=(d['router/static']&&d['router/static'].results)?d['router/static'].results.length:0;
+    var vips=(d['firewall/vip']&&d['firewall/vip'].results)?d['firewall/vip'].results.length:0;
+    var ippool=(d['firewall/ippool']&&d['firewall/ippool'].results)?d['firewall/ippool'].results.length:0;
+    var users=(d['user/local']&&d['user/local'].results)?d['user/local'].results.length:0;
+    var groups=(d['user/group']&&d['user/group'].results)?d['user/group'].results.length:0;
+    var addrgrp=(d['firewall/addrgrp']&&d['firewall/addrgrp'].results)?d['firewall/addrgrp'].results.length:0;
+    var svcgrp=(d['firewall/service/group']&&d['firewall/service/group'].results)?d['firewall/service/group'].results.length:0;
+    
+    document.getElementById('vdomCounts').innerHTML=
+        '<div class="vdom-count"><div class="vdom-count-label">Policies</div><div class="vdom-count-value">'+pol+'</div></div>'+
+        '<div class="vdom-count"><div class="vdom-count-label">Addresses</div><div class="vdom-count-value">'+addr+'</div></div>'+
+        '<div class="vdom-count"><div class="vdom-count-label">Addr Groups</div><div class="vdom-count-value">'+addrgrp+'</div></div>'+
+        '<div class="vdom-count"><div class="vdom-count-label">Services</div><div class="vdom-count-value">'+svc+'</div></div>'+
+        '<div class="vdom-count"><div class="vdom-count-label">Svc Groups</div><div class="vdom-count-value">'+svcgrp+'</div></div>'+
+        '<div class="vdom-count"><div class="vdom-count-label">VPN Tunnels</div><div class="vdom-count-value">'+vpn+'</div></div>'+
+        '<div class="vdom-count"><div class="vdom-count-label">Static Routes</div><div class="vdom-count-value">'+routes+'</div></div>'+
+        '<div class="vdom-count"><div class="vdom-count-label">VIPs</div><div class="vdom-count-value">'+vips+'</div></div>'+
+        '<div class="vdom-count"><div class="vdom-count-label">IP Pools</div><div class="vdom-count-value">'+ippool+'</div></div>'+
+        '<div class="vdom-count"><div class="vdom-count-label">Users</div><div class="vdom-count-value">'+users+'</div></div>'+
+        '<div class="vdom-count"><div class="vdom-count-label">Groups</div><div class="vdom-count-value">'+groups+'</div></div>';
+    
+    document.getElementById('vdomKPIs').innerHTML=
+        '<div class="kpi cyan"><div class="kpi-label">VDOM</div><div class="kpi-value">'+currentVdom+'</div></div>'+
+        '<div class="kpi green"><div class="kpi-label">Policies</div><div class="kpi-value">'+pol+'</div></div>'+
+        '<div class="kpi cyan"><div class="kpi-label">Addresses</div><div class="kpi-value">'+addr+'</div></div>'+
+        '<div class="kpi purple"><div class="kpi-label">VPN Phase1</div><div class="kpi-value">'+vpn+'</div></div>'+
+        '<div class="kpi yellow"><div class="kpi-label">VIPs</div><div class="kpi-value">'+vips+'</div></div>';
+}
+var currentSesVdom='root',currentSesRange=0;
+function renderSesiones(){
+    var vdoms=Object.keys(allData.vdoms||{});
+    var btns=vdoms.map(function(v){
+        return'<button class="vdom-btn '+(v===currentSesVdom?'active':'')+'" id="sesVdom_'+v+'">'+v+'</button>';
+    }).join('');
+    document.getElementById('sesVdomSelector').innerHTML=btns;
+    vdoms.forEach(function(v){
+        document.getElementById('sesVdom_'+v).onclick=function(){selectSesVdom(v)};
+    });
+    var ranges=['0-1000','1000-2000','2000-3000','3000-4000','4000-5000'];
+    var rangeBtns=ranges.map(function(r,i){
+        return'<button class="cat-btn '+(i===currentSesRange?'active':'')+'" id="sesRange_'+i+'">'+r+'</button>';
+    }).join('');
+    document.getElementById('sesRangeSelector').innerHTML=rangeBtns;
+    ranges.forEach(function(r,i){
+        document.getElementById('sesRange_'+i).onclick=function(){selectSesRange(i)};
+    });
+    var totalSes=0;
+    vdoms.forEach(function(v){
+        var d=allData.vdoms[v];
+        if(d&&d['monitor/firewall/session?count=1000&start=0']&&d['monitor/firewall/session?count=1000&start=0'].results){
+            totalSes+=d['monitor/firewall/session?count=1000&start=0'].results.length||0;
+        }
+    });
+    document.getElementById('sesKPIs').innerHTML='<div class="kpi cyan"><div class="kpi-label">Total Sesiones</div><div class="kpi-value">'+totalSes+'</div></div><div class="kpi green"><div class="kpi-label">VDOMs</div><div class="kpi-value">'+vdoms.length+'</div></div>';
+    renderSesTable();
+}
+function selectSesVdom(vdom){currentSesVdom=vdom;document.querySelectorAll('#sesVdomSelector .vdom-btn').forEach(function(b){b.classList.remove('active')});document.getElementById('sesVdom_'+vdom).classList.add('active');renderSesTable();}
+function selectSesRange(range){currentSesRange=range;document.querySelectorAll('#sesRangeSelector .cat-btn').forEach(function(b){b.classList.remove('active')});document.getElementById('sesRange_'+range).classList.add('active');renderSesTable();}
+function renderSesTable(){
+    var key='monitor/firewall/session?count=1000&start='+(currentSesRange*1000);
+    var data=allData.vdoms[currentSesVdom]?allData.vdoms[currentSesVdom][key]:null;
+    if(!data||!data.results||!data.results.length){document.getElementById('sesTable').innerHTML='<div class="loading">No hay sesiones en este rango</div>';return;}
+    var results=data.results;
+    var html='<table><thead><tr><th>Source IP</th><th>Src Port</th><th>Dest IP</th><th>Dst Port</th><th>Proto</th><th>State</th></tr></thead><tbody>';
+    results.slice(0,50).forEach(function(s){
+        var state=(s.state||'unknown').toLowerCase();
+        html+='<tr><td>'+(s.sourceIP||'-')+'</td><td>'+(s.sourcePort||'-')+'</td><td>'+(s.dstIP||'-')+'</td><td>'+(s.dstPort||'-')+'</td><td>'+(s.protocol||'-')+'</td><td><span class="badge '+(state==='established'||state==='up'?'badge-enable':'badge-disable')+'">'+(s.state||'-')+'</span></td></tr>';
+    });
+    html+='</tbody></table>';
+    document.getElementById('sesTable').innerHTML=html+'<p style="padding:10px;color:var(--sub)">Mostrando '+Math.min(50,results.length)+' de '+results.length+' sesiones</p>';
+}
+function renderVPN(){
+    var vpnMon=allData.system['vpn_monitor']||{};
+    var monData=vpnMon['monitor/vpn/ipsec']||{};
+    var monResults=monData.results||[];
+    
+    var vpns=[];
+    var upCount=0;
+    
+    if(Array.isArray(monResults)){
+        monResults.forEach(function(tunnel){
+            var status='down';
+            if(tunnel.proxyid&&Array.isArray(tunnel.proxyid)){
+                tunnel.proxyid.forEach(function(p){
+                    if(p.status==='up')status='up';
+                });
+            }
+            if(status==='up')upCount++;
+            vpns.push({
+                name:tunnel.name||tunnel.p2name||'VPN',
+                remote:tunnel.remotegw||'-',
+                status:status,
+                inBytes:tunnel['incoming_bytes']||0,
+                outBytes:tunnel['outgoing_bytes']||0
+            });
+        });
+    }
+    
+    document.getElementById('vpnKPIs').innerHTML=
+        '<div class="kpi cyan"><div class="kpi-label">Total IPSec</div><div class="kpi-value">'+vpns.length+'</div></div>'+
+        '<div class="kpi green"><div class="kpi-label">Active</div><div class="kpi-value">'+upCount+'</div></div>'+
+        '<div class="kpi purple"><div class="kpi-label">Inactive</div><div class="kpi-value">'+(vpns.length-upCount)+'</div></div>';
+    
+    if(vpns.length===0){
+        document.getElementById('vpnTable').innerHTML='<div class="loading">No hay tunnels activos</div>';
+        return;
+    }
+    var html='<table><thead><tr><th>Name</th><th>Remote</th><th>Status</th><th>In Bytes</th><th>Out Bytes</th></tr></thead><tbody>';
+    vpns.forEach(function(v){
+        html+='<tr><td><b>'+v.name+'</b></td><td>'+(v.remote||'-')+'</td><td><span class="badge '+(v.status==='up'?'badge-enable':'badge-disable')+'">'+(v.status||'down').toUpperCase()+'</span></td><td>'+formatBytes(v.inBytes)+'</td><td>'+formatBytes(v.outBytes)+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    document.getElementById('vpnTable').innerHTML=html;
+}
+function formatBytes(b){if(!b)return'0 B';var e=Math.floor(Math.log(b)/Math.log(1024));return(b/Math.pow(1024,e)).toFixed(1)+' '+['B','KB','MB','GB'][e];}
+function renderFirewall(){
+    var cats=Object.keys(allData.vdoms[currentVdom]||{});
+    var html=cats.map(function(c){
+        var cnt=allData.vdoms[currentVdom][c]?allData.vdoms[currentVdom][c].results.length:0;
+        var label=c.split('/').pop().replace(/_/g,' ');
+        return'<button class="cat-btn" id="cat_'+c.replace(/\//g,'_')+'">'+label+' ('+cnt+')</button>';
+    }).join('');
+    document.getElementById('categoryTabs').innerHTML=html;
+    cats.forEach(function(c){
+        document.getElementById('cat_'+c.replace(/\//g,'_')).onclick=function(){selectCategory(c)};
+    });
+    if(!currentCategory&&cats.length){currentCategory=cats[0];renderTable();}
+}
+function selectCategory(cat){
+    currentCategory=cat;
+    document.querySelectorAll('.cat-btn').forEach(function(b){b.classList.remove('active')});
+    document.getElementById('cat_'+cat.replace(/\//g,'_')).classList.add('active');
+    renderTable();
+}
+function renderTable(){
+    var data=allData.vdoms[currentVdom][currentCategory];
+    if(!data||!data.results||!data.results.length){
+        document.getElementById('tableContainer').innerHTML='<div class="loading">SIN DATOS</div>';return;
+    }
+    var results=data.results;
+    var keys=Object.keys(results[0]).filter(function(k){return!k.startsWith('uuid')&&!k.startsWith('q_origin')&&k!=='revision'});
+    var html='<table><thead><tr>';
+    keys.slice(0,8).forEach(function(k){html+='<th>'+k.replace(/_/g,' ')+'</th>'});
+    html+='</tr></thead><tbody>';
+    results.forEach(function(row){
+        html+='<tr>';
+        keys.slice(0,8).forEach(function(k){
+            var val=row[k];
+            if(Array.isArray(val))val=val.map(function(v){return v.name||v}).join(', ')||'-';
+            else if(typeof val==='object'&&val!==null)val=val.name||'-';
+            val=(val===''||val===undefined||val===null)?'-':String(val);
+            if(val==='enable')val='<span class="badge badge-enable">ENABLE</span>';
+            else if(val==='disable')val='<span class="badge badge-disable">DISABLE</span>';
+            else if(val==='accept')val='<span class="badge badge-accept">ACCEPT</span>';
+            else if(val==='deny'||val==='drop')val='<span class="badge badge-deny">DENY</span>';
+            html+='<td>'+val.substring(0,50)+(val.length>50?'...':'')+'</td>';
+        });
+        html+='</tr>';
+    });
+    html+='</tbody></table>';
+    document.getElementById('tableContainer').innerHTML=html;
+}
+function filterTable(){
+    var input=document.getElementById('searchInput').value.toLowerCase();
+    document.querySelectorAll('#tableContainer tbody tr').forEach(function(row){
+        row.style.display=row.textContent.toLowerCase().indexOf(input)>-1?'':'none';
+    });
+}
+function formatNum(n){return new Intl.NumberFormat().format(n)}
+loadData();
+startAutoRefresh();
+</script></body></html>
