@@ -86,7 +86,7 @@ body{font-family:Segoe UI,Arial;background:var(--bg);color:var(--txt);min-height
 .panel-title{font-size:.85em;color:var(--cyan);text-transform:uppercase}
 .search{margin:15px 0}
 .search input{width:100%;padding:10px 15px;background:var(--card);border:1px solid #374151;border-radius:4px;color:var(--txt)}
-.table-wrap{max-height:400px;overflow-y:auto}
+.table-wrap{max-height:500px;overflow-y:auto}
 table{width:100%;border-collapse:collapse;font-size:.85em}
 th{background:var(--card);color:var(--cyan);padding:10px;text-align:left;font-size:.75em;text-transform:uppercase;border-bottom:1px solid #374151}
 td{padding:8px 10px;border-bottom:1px solid rgba(55,65,81,.5);color:var(--sub)}
@@ -475,38 +475,58 @@ function renderSesiones(){
     vdoms.forEach(function(v){
         document.getElementById('sesVdom_'+v).onclick=function(){selectSesVdom(v)};
     });
-    var ranges=['0-1000','1000-2000','2000-3000','3000-4000','4000-5000'];
-    var rangeBtns=ranges.map(function(r,i){
-        return'<button class="cat-btn '+(i===currentSesRange?'active':'')+'" id="sesRange_'+i+'">'+r+'</button>';
-    }).join('');
-    document.getElementById('sesRangeSelector').innerHTML=rangeBtns;
-    ranges.forEach(function(r,i){
-        document.getElementById('sesRange_'+i).onclick=function(){selectSesRange(i)};
-    });
-    var totalSes=0;
+    
+    var allSessions=[];
+    var vdomStats={};
     vdoms.forEach(function(v){
-        var d=allData.vdoms[v];
-        if(d&&d['monitor/firewall/session?count=1000&start=0']&&d['monitor/firewall/session?count=1000&start=0'].results){
-            totalSes+=d['monitor/firewall/session?count=1000&start=0'].results.length||0;
+        vdomStats[v]={total:0,established:0,new:0,closing:0,proto:{}};
+        for(var i=0;i<5;i++){
+            var key='monitor/firewall/session?count=1000&start='+(i*1000);
+            var d=allData.vdoms[v]?allData.vdoms[v][key]:null;
+            if(d&&d.results){
+                d.results.forEach(function(s){
+                    allSessions.push(Object.assign({},s,{_vdom:v}));
+                    vdomStats[v].total++;
+                    var state=(s.state||'unknown').toLowerCase();
+                    if(state==='established'||state==='up')vdomStats[v].established++;
+                    else if(state==='new')vdomStats[v].new++;
+                    else if(state==='closing'||state==='close')vdomStats[v].closing++;
+                    var proto=s.protocol||'Unknown';
+                    vdomStats[v].proto[proto]=(vdomStats[v].proto[proto]||0)+1;
+                });
+            }
         }
     });
-    document.getElementById('sesKPIs').innerHTML='<div class="kpi cyan"><div class="kpi-label">Total Sesiones</div><div class="kpi-value">'+totalSes+'</div></div><div class="kpi green"><div class="kpi-label">VDOMs</div><div class="kpi-value">'+vdoms.length+'</div></div>';
-    renderSesTable();
-}
-function selectSesVdom(vdom){currentSesVdom=vdom;document.querySelectorAll('#sesVdomSelector .vdom-btn').forEach(function(b){b.classList.remove('active')});document.getElementById('sesVdom_'+vdom).classList.add('active');renderSesTable();}
-function selectSesRange(range){currentSesRange=range;document.querySelectorAll('#sesRangeSelector .cat-btn').forEach(function(b){b.classList.remove('active')});document.getElementById('sesRange_'+range).classList.add('active');renderSesTable();}
-function renderSesTable(){
-    var key='monitor/firewall/session?count=1000&start='+(currentSesRange*1000);
-    var data=allData.vdoms[currentSesVdom]?allData.vdoms[currentSesVdom][key]:null;
-    if(!data||!data.results||!data.results.length){document.getElementById('sesTable').innerHTML='<div class="loading">No hay sesiones en este rango</div>';return;}
-    var results=data.results;
-    var html='<table><thead><tr><th>Source IP</th><th>Src Port</th><th>Dest IP</th><th>Dst Port</th><th>Proto</th><th>State</th></tr></thead><tbody>';
-    results.slice(0,50).forEach(function(s){
+    
+    var totalSes=allSessions.length;
+    var statsHTML='<div class="kpi cyan"><div class="kpi-label">Total Sesiones</div><div class="kpi-value">'+totalSes+'</div></div>';
+    statsHTML+='<div class="kpi green"><div class="kpi-label">Established</div><div class="kpi-value">'+(Object.values(vdomStats).reduce(function(s,v){return s+v.established},0))+'</div></div>';
+    statsHTML+='<div class="kpi yellow"><div class="kpi-label">New</div><div class="kpi-value">'+(Object.values(vdomStats).reduce(function(s,v){return s+v.new},0))+'</div></div>';
+    statsHTML+='<div class="kpi purple"><div class="kpi-label">Closing</div><div class="kpi-value">'+(Object.values(vdomStats).reduce(function(s,v){return s+v.closing},0))+'</div></div>';
+    document.getElementById('sesKPIs').innerHTML=statsHTML;
+    
+    var vdomFilter=currentSesVdom;
+    var filtered=vdomFilter==='all'?allSessions:allSessions.filter(function(s){return s._vdom===vdomFilter});
+    
+    var protoFilter=document.getElementById('sesProtoFilter')?document.getElementById('sesProtoFilter').value:'';
+    if(protoFilter)filtered=filtered.filter(function(s){return s.protocol===protoFilter});
+    
+    var stateFilter=document.getElementById('sesStateFilter')?document.getElementById('sesStateFilter').value:'';
+    if(stateFilter)filtered=filtered.filter(function(s){return(s.state||'').toLowerCase()===stateFilter});
+    
+    document.getElementById('sesTable').innerHTML='<div style="padding:10px;background:var(--card);margin-bottom:10px;border-radius:4px"><div style="display:flex;gap:10px;flex-wrap:wrap"><select id="sesProtoFilter" onchange="renderSesiones()" style="padding:5px;background:var(--bg);color:var(--txt);border:1px solid #374151;border-radius:4px"><option value="">Todos Protocolos</option>'+
+        Object.keys(Object.values(vdomStats).reduce(function(p,v){Object.keys(v.proto).forEach(function(k){p[k]=true});return p},{})).sort().map(function(p){return'<option value="'+p+'"'+(protoFilter===p?' selected':'')+'>'+p+'</option>'}).join('')+'</select>'+
+        '<select id="sesStateFilter" onchange="renderSesiones()" style="padding:5px;background:var(--bg);color:var(--txt);border:1px solid #374151;border-radius:4px"><option value="">Todos Estados</option><option value="established"'+(stateFilter==='established'?' selected':'')+'>Established</option><option value="new"'+(stateFilter==='new'?' selected':'')+'>New</option><option value="closing"'+(stateFilter==='closing'?' selected':'')+'>Closing</option></select>'+
+        '<span style="color:var(--sub);line-height:30px">Mostrando '+Math.min(100,filtered.length)+' de '+filtered.length+' sesiones</span></div></div>';
+    
+    var html='<table><thead><tr><th>VDOM</th><th>Source IP</th><th>Src Port</th><th>Dest IP</th><th>Dst Port</th><th>Proto</th><th>State</th><th>Age</th></tr></thead><tbody>';
+    filtered.slice(0,100).forEach(function(s){
         var state=(s.state||'unknown').toLowerCase();
-        html+='<tr><td>'+(s.sourceIP||'-')+'</td><td>'+(s.sourcePort||'-')+'</td><td>'+(s.dstIP||'-')+'</td><td>'+(s.dstPort||'-')+'</td><td>'+(s.protocol||'-')+'</td><td><span class="badge '+(state==='established'||state==='up'?'badge-enable':'badge-disable')+'">'+(s.state||'-')+'</span></td></tr>';
+        var age=s.age||s.duration||0;
+        html+='<tr><td><b>'+s._vdom+'</b></td><td>'+(s.sourceIP||'-')+'</td><td>'+(s.sourcePort||'-')+'</td><td>'+(s.dstIP||'-')+'</td><td>'+(s.dstPort||'-')+'</td><td>'+(s.protocol||'-')+'</td><td><span class="badge '+(state==='established'||state==='up'?'badge-enable':(state==='closing'?'badge-deny':'badge-disable'))+'">'+(s.state||'-')+'</span></td><td>'+age+'s</td></tr>';
     });
     html+='</tbody></table>';
-    document.getElementById('sesTable').innerHTML=html+'<p style="padding:10px;color:var(--sub)">Mostrando '+Math.min(50,results.length)+' de '+results.length+' sesiones</p>';
+    document.getElementById('sesTable').innerHTML+=html;
 }
 function renderVPN(){
     var vpnMon=allData.system['vpn_monitor']||{};
