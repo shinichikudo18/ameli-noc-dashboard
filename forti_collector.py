@@ -98,16 +98,8 @@ def save_snapshot():
             data = fetch(f"{API}/api/v2/cmdb/{ep}?vdom={vdom}")
             snapshot["vdoms"][vdom][ep] = data
         
-        session_endpoints = [
-            f"monitor/system/session?count=1000&start=0",
-            f"monitor/system/session?count=1000&start=1000",
-            f"monitor/system/session?count=1000&start=2000",
-            f"monitor/system/session?count=1000&start=3000",
-            f"monitor/system/session?count=1000&start=4000",
-        ]
-        for ep in session_endpoints:
-            data = fetch(f"{API}/api/v2/{ep}?vdom={vdom}")
-            snapshot["vdoms"][vdom][ep] = data
+        data = fetch(f"{API}/api/v2/monitor/firewall/policy?vdom={vdom}&count=500")
+        snapshot["vdoms"][vdom]["policy_sessions"] = data
     
     monitor_endpoints = [
         "monitor/system/status", "monitor/system/interface",
