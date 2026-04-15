@@ -628,7 +628,7 @@ function renderSesiones(){
 
     var html='<div class="panel"><div class="panel-header"><span class="panel-title">VDOM: '+currentSesVdom+' - Sessions by Policy</span></div>';
     html+='<div style="padding:12px">'+filterHtml+pager;
-    html+='<div class="table-wrap"><table><thead><tr><th>ID</th><th>Policy</th><th>Src IP/Host</th><th>Dst IP/Host</th><th>App</th><th>AppID</th><th>Proto/Port</th><th>País</th><th>Active</th><th>Total</th></tr></thead><tbody>';
+    html+='<div style="overflow:visible"><table><thead><tr><th>ID</th><th>Policy</th><th>Src IP/Host</th><th>Dst IP/Host</th><th>App</th><th>AppID</th><th>Proto/Port</th><th>País</th><th>Active</th><th>Total</th></tr></thead><tbody>';
     pageRows.forEach(function(r){
         html+='<tr>'+
             '<td>'+r.id+'</td>'+
