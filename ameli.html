@@ -593,15 +593,17 @@ function renderVPN(){
 }
 function formatBytes(b){if(!b)return'0 B';var e=Math.floor(Math.log(b)/Math.log(1024));return(b/Math.pow(1024,e)).toFixed(1)+' '+['B','KB','MB','GB'][e];}
 function renderFirewall(){
-    var cats=Object.keys(allData.vdoms[currentVdom]||{});
+    var vdomData=allData.vdoms[currentVdom]||{};
+    var cats=Object.keys(vdomData).filter(function(c){return vdomData[c]&&vdomData[c].results});
     var html=cats.map(function(c){
-        var cnt=allData.vdoms[currentVdom][c]?allData.vdoms[currentVdom][c].results.length:0;
+        var cnt=(vdomData[c]&&vdomData[c].results)?vdomData[c].results.length:0;
         var label=c.split('/').pop().replace(/_/g,' ');
         return'<button class="cat-btn" id="cat_'+c.replace(/\//g,'_')+'">'+label+' ('+cnt+')</button>';
     }).join('');
-    document.getElementById('categoryTabs').innerHTML=html;
+    document.getElementById('categoryTabs').innerHTML=html||'<p style="padding:20px;color:var(--sub)">Sin datos de firewall</p>';
     cats.forEach(function(c){
-        document.getElementById('cat_'+c.replace(/\//g,'_')).onclick=function(){selectCategory(c)};
+        var btn=document.getElementById('cat_'+c.replace(/\//g,'_'));
+        if(btn)btn.onclick=function(){selectCategory(c)};
     });
     if(!currentCategory&&cats.length){currentCategory=cats[0];renderTable();}
 }
@@ -612,11 +614,13 @@ function selectCategory(cat){
     renderTable();
 }
 function renderTable(){
-    var data=allData.vdoms[currentVdom][currentCategory];
-    if(!data||!data.results||!data.results.length){
+    var vdomData=allData.vdoms[currentVdom]||{};
+    var data=vdomData[currentCategory];
+    if(!data||!data.results||!data.results||!Array.isArray(data.results)||!data.results.length){
         document.getElementById('tableContainer').innerHTML='<div class="loading">SIN DATOS</div>';return;
     }
     var results=data.results;
+    if(!results||!results.length){document.getElementById('tableContainer').innerHTML='<div class="loading">SIN DATOS</div>';return;}
     var keys=Object.keys(results[0]).filter(function(k){return!k.startsWith('uuid')&&!k.startsWith('q_origin')&&k!=='revision'});
     var html='<table><thead><tr>';
     keys.slice(0,8).forEach(function(k){html+='<th>'+k.replace(/_/g,' ')+'</th>'});
