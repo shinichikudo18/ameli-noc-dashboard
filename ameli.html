@@ -553,7 +553,8 @@ function renderSesiones(){
     var mem=(u.mem&&u.mem[0])?u.mem[0].current||0:0;
 
     var totalActiveSes=0,totalSesCount=0;
-    policySessions.forEach(function(p){totalActiveSes+=p.active_sessions||0;totalSesCount+=p.session_count||0;});
+    function safeCount(v){v=Number(v)||0; return (v<0||v>1000000000)?0:v;}
+    policySessions.forEach(function(p){totalActiveSes+=safeCount(p.active_sessions);totalSesCount+=safeCount(p.session_count);});
     document.getElementById('sesKPIs').innerHTML=
         '<div class="kpi cyan"><div class="kpi-label">Active Sessions</div><div class="kpi-value">'+totalActiveSes+'</div></div>'+
         '<div class="kpi green"><div class="kpi-label">Total Sessions</div><div class="kpi-value">'+totalSesCount+'</div></div>'+
@@ -588,10 +589,11 @@ function renderSesiones(){
             proto:proto,
             country:addrCountry(dst),
             active:p.active_sessions||0,
-            total:p.session_count||0,
-            bytes:p.bytes||0,
-            packets:p.packets||0,
-            hits:p.hit_count||0,
+            active:safeCount(p.active_sessions),
+            total:safeCount(p.session_count),
+            bytes:safeCount(p.bytes),
+            packets:safeCount(p.packets),
+            hits:safeCount(p.hit_count),
             srcintf:joinedNames(pol.srcintf),
             dstintf:joinedNames(pol.dstintf),
             status:pol.status||'disable'
