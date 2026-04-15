@@ -517,57 +517,63 @@ function renderSesiones(){
         document.getElementById('sesVdom_'+v).onclick=function(){selectSesVdom(v)};
     });
     
-    var allSessions=[];
+    var bw=allData.bandwidth||[];
+    var totalTx=0,totalRx=0;
+    bw.forEach(function(b){totalTx+=b.tx_rate||0;totalRx+=b.rx_rate||0});
+    
     var vdomStats={};
+    vdoms.forEach(function(v){vdomStats[v]={policies:0,addresses:0,vpn:0};});
     vdoms.forEach(function(v){
-        vdomStats[v]={total:0,established:0,new:0,closing:0,proto:{}};
-        for(var i=0;i<5;i++){
-            var key='monitor/firewall/session?count=1000&start='+(i*1000);
-            var d=allData.vdoms[v]?allData.vdoms[v][key]:null;
-            if(d&&d.results){
-                d.results.forEach(function(s){
-                    allSessions.push(Object.assign({},s,{_vdom:v}));
-                    vdomStats[v].total++;
-                    var state=(s.state||'unknown').toLowerCase();
-                    if(state==='established'||state==='up')vdomStats[v].established++;
-                    else if(state==='new')vdomStats[v].new++;
-                    else if(state==='closing'||state==='close')vdomStats[v].closing++;
-                    var proto=s.protocol||'Unknown';
-                    vdomStats[v].proto[proto]=(vdomStats[v].proto[proto]||0)+1;
-                });
-            }
-        }
+        var d=allData.vdoms[v]||{};
+        vdomStats[v].policies=(d['firewall/policy']&&d['firewall/policy'].results)?d['firewall/policy'].results.length:0;
+        vdomStats[v].addresses=(d['firewall/address']&&d['firewall/address'].results)?d['firewall/address'].results.length:0;
+        vdomStats[v].vpn=(d['vpn.ipsec/phase1-interface']&&d['vpn.ipsec/phase1-interface'].results)?d['vpn.ipsec/phase1-interface'].results.length:0;
     });
     
-    var totalSes=allSessions.length;
-    var statsHTML='<div class="kpi cyan"><div class="kpi-label">Total Sesiones</div><div class="kpi-value">'+totalSes+'</div></div>';
-    statsHTML+='<div class="kpi green"><div class="kpi-label">Established</div><div class="kpi-value">'+(Object.values(vdomStats).reduce(function(s,v){return s+v.established},0))+'</div></div>';
-    statsHTML+='<div class="kpi yellow"><div class="kpi-label">New</div><div class="kpi-value">'+(Object.values(vdomStats).reduce(function(s,v){return s+v.new},0))+'</div></div>';
-    statsHTML+='<div class="kpi purple"><div class="kpi-label">Closing</div><div class="kpi-value">'+(Object.values(vdomStats).reduce(function(s,v){return s+v.closing},0))+'</div></div>';
-    document.getElementById('sesKPIs').innerHTML=statsHTML;
+    var u=allData.system['monitor/system/resource/usage'].results||{};
+    var cpu=0,mem=0;
+    if(u.cpu&&Array.isArray(u.cpu)&&u.cpu[0])cpu=u.cpu[0].current||0;
+    if(u.mem&&Array.isArray(u.mem)&&u.mem[0])mem=u.mem[0].current||0;
     
-    var vdomFilter=currentSesVdom;
-    var filtered=vdomFilter==='all'?allSessions:allSessions.filter(function(s){return s._vdom===vdomFilter});
+    document.getElementById('sesKPIs').innerHTML=
+        '<div class="kpi cyan"><div class="kpi-label">CPU</div><div class="kpi-value">'+cpu+'%</div></div>'+
+        '<div class="kpi purple"><div class="kpi-label">Memory</div><div class="kpi-value">'+mem+'%</div></div>'+
+        '<div class="kpi green"><div class="kpi-label">TX Rate</div><div class="kpi-value">'+formatRate(totalTx)+'</div></div>'+
+        '<div class="kpi yellow"><div class="kpi-label">RX Rate</div><div class="kpi-value">'+formatRate(totalRx)+'</div></div>';
     
-    var protoFilter=document.getElementById('sesProtoFilter')?document.getElementById('sesProtoFilter').value:'';
-    if(protoFilter)filtered=filtered.filter(function(s){return s.protocol===protoFilter});
+    var d=allData.vdoms[currentSesVdom]||{};
+    var policies=(d['firewall/policy']&&d['firewall/policy'].results)?d['firewall/policy'].results:[];
+    var addresses=(d['firewall/address']&&d['firewall/address'].results)?d['firewall/address'].results:[];
+    var services=(d['firewall/service/custom']&&d['firewall/service/custom'].results)?d['firewall/service/custom'].results:[];
     
-    var stateFilter=document.getElementById('sesStateFilter')?document.getElementById('sesStateFilter').value:'';
-    if(stateFilter)filtered=filtered.filter(function(s){return(s.state||'').toLowerCase()===stateFilter});
-    
-    document.getElementById('sesTable').innerHTML='<div style="padding:10px;background:var(--card);margin-bottom:10px;border-radius:4px"><div style="display:flex;gap:10px;flex-wrap:wrap"><select id="sesProtoFilter" onchange="renderSesiones()" style="padding:5px;background:var(--bg);color:var(--txt);border:1px solid #374151;border-radius:4px"><option value="">Todos Protocolos</option>'+
-        Object.keys(Object.values(vdomStats).reduce(function(p,v){Object.keys(v.proto).forEach(function(k){p[k]=true});return p},{})).sort().map(function(p){return'<option value="'+p+'"'+(protoFilter===p?' selected':'')+'>'+p+'</option>'}).join('')+'</select>'+
-        '<select id="sesStateFilter" onchange="renderSesiones()" style="padding:5px;background:var(--bg);color:var(--txt);border:1px solid #374151;border-radius:4px"><option value="">Todos Estados</option><option value="established"'+(stateFilter==='established'?' selected':'')+'>Established</option><option value="new"'+(stateFilter==='new'?' selected':'')+'>New</option><option value="closing"'+(stateFilter==='closing'?' selected':'')+'>Closing</option></select>'+
-        '<span style="color:var(--sub);line-height:30px">Mostrando '+Math.min(100,filtered.length)+' de '+filtered.length+' sesiones</span></div></div>';
-    
-    var html='<table><thead><tr><th>VDOM</th><th>Source IP</th><th>Src Port</th><th>Dest IP</th><th>Dst Port</th><th>Proto</th><th>State</th><th>Age</th></tr></thead><tbody>';
-    filtered.slice(0,100).forEach(function(s){
-        var state=(s.state||'unknown').toLowerCase();
-        var age=s.age||s.duration||0;
-        html+='<tr><td><b>'+s._vdom+'</b></td><td>'+(s.sourceIP||'-')+'</td><td>'+(s.sourcePort||'-')+'</td><td>'+(s.dstIP||'-')+'</td><td>'+(s.dstPort||'-')+'</td><td>'+(s.protocol||'-')+'</td><td><span class="badge '+(state==='established'||state==='up'?'badge-enable':(state==='closing'?'badge-deny':'badge-disable'))+'">'+(s.state||'-')+'</span></td><td>'+age+'s</td></tr>';
+    var html='<div class="panel"><div class="panel-header"><span class="panel-title">Firewall Policies ('+policies.length+')</span></div>';
+    html+='<div class="table-wrap"><table><thead><tr><th>ID</th><th>Name</th><th>Src Intf</th><th>Dst Intf</th><th>Src Addr</th><th>Dst Addr</th><th>Service</th><th>Status</th></tr></thead><tbody>';
+    policies.slice(0,100).forEach(function(p){
+        var srcintf=(p.srcintf&&Array.isArray(p.srcintf))?p.srcintf.map(function(x){return x.name||x}).join(', '):'-';
+        var dstintf=(p.dstintf&&Array.isArray(p.dstintf))?p.dstintf.map(function(x){return x.name||x}).join(', '):'-';
+        var srcaddr=(p.srcaddr&&Array.isArray(p.srcaddr))?p.srcaddr.map(function(x){return x.name||x}).join(', '):'-';
+        var dstaddr=(p.dstaddr&&Array.isArray(p.dstaddr))?p.dstaddr.map(function(x){return x.name||x}).join(', '):'-';
+        var svc=(p.service&&Array.isArray(p.service))?p.service.map(function(x){return x.name||x}).join(', '):'-';
+        html+='<tr><td>'+p.policyid+'</td><td><b>'+(p.name||'-')+'</b></td><td>'+srcintf+'</td><td>'+dstintf+'</td><td>'+srcaddr+'</td><td>'+dstaddr+'</td><td>'+svc+'</td><td><span class="badge '+(p.status==='enable'?'badge-enable':'badge-disable')+'">'+(p.status||'-')+'</span></td></tr>';
     });
-    html+='</tbody></table>';
-    document.getElementById('sesTable').innerHTML+=html;
+    html+='</tbody></table></div></div>';
+    
+    html+='<div class="panel"><div class="panel-header"><span class="panel-title">Addresses ('+addresses.length+')</span></div>';
+    html+='<div class="table-wrap"><table><thead><tr><th>Name</th><th>Type</th><th>IP/Netmask</th><th>Interface</th></tr></thead><tbody>';
+    addresses.slice(0,100).forEach(function(a){
+        html+='<tr><td><b>'+(a.name||'-')+'</b></td><td>'+(a.type||'-')+'</td><td>'+(a.subnet||a.fqdn||'-')+'</td><td>'+(a.interface||'-')+'</td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+    
+    html+='<div class="panel"><div class="panel-header"><span class="panel-title">Services ('+services.length+')</span></div>';
+    html+='<div class="table-wrap"><table><thead><tr><th>Name</th><th>Category</th><th>Protocol</th><th>Ports</th></tr></thead><tbody>';
+    services.slice(0,100).forEach(function(s){
+        var ports=(s.tcp_portrange||s.udp_portrange||'-');
+        html+='<tr><td><b>'+(s.name||'-')+'</b></td><td>'+(s.category||'-')+'</td><td>'+(s.protocol||'-')+'</td><td>'+ports+'</td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+    
+    document.getElementById('sesTable').innerHTML=html;
 }
 function renderVPN(){
     var vpnMon=allData.system['vpn_monitor']||{};
