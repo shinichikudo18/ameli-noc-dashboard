@@ -207,16 +207,18 @@ def decode_snmp(data):
     raise ValueError(f"unsupported SNMP version {version}")
 
 
-def format_event(src, decoded, raw_hex):
+def format_event(src, src_port, decoded, raw_hex):
     event = {
         "timestamp": now_iso(),
         "source": src,
+        "source_port": src_port,
         "community": decoded.get("community", "-"),
         "version": decoded.get("version", "-"),
         "trap_oid": decoded.get("trap_oid", "-"),
         "trap_name": decoded.get("trap_name", "unknown"),
         "notification_type": decoded.get("notification_type", "-"),
         "band": decoded.get("band", "-"),
+        "raw_len": len(raw_hex) // 2,
         "varbinds": decoded.get("varbinds", []),
         "raw_hex": raw_hex,
     }
@@ -260,7 +262,7 @@ def main():
         data, addr = sock.recvfrom(65535)
         try:
             decoded = decode_snmp(data)
-            event = format_event(addr[0], decoded, binascii.hexlify(data).decode())
+            event = format_event(addr[0], addr[1], decoded, binascii.hexlify(data).decode())
             events.insert(0, event)
             del events[100:]
             write_state(args.out, events)
@@ -269,12 +271,14 @@ def main():
             err = {
                 "timestamp": now_iso(),
                 "source": addr[0],
+                "source_port": addr[1],
                 "community": "-",
                 "version": "-",
                 "trap_oid": "-",
                 "trap_name": "parse-error",
                 "notification_type": str(e),
                 "band": "-",
+                "raw_len": len(data),
                 "varbinds": [],
                 "raw_hex": binascii.hexlify(data).decode(),
             }

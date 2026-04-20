@@ -245,7 +245,7 @@ tr:hover td{background:rgba(0,212,255,.05)}
             <div class="table-wrap" id="ampTable"><div class="loading">CARGANDO</div></div>
         </div>
         <div class="panel">
-            <div class="panel-header"><span class="panel-title">Detalle del Ultimo Trap</span></div>
+            <div class="panel-header"><span class="panel-title">Resumen y Detalle</span></div>
             <div class="table-wrap" id="ampDetail"><div class="loading">CARGANDO</div></div>
         </div>
     </div>
@@ -799,17 +799,44 @@ function renderAmplificador(){
         var events=d.events||[];
         var last=events[0]||null;
         var traps=events.length;
+        var byType={};
+        var bySource={};
+        events.forEach(function(e){
+            byType[e.trap_name]=(byType[e.trap_name]||0)+1;
+            bySource[e.source]=(bySource[e.source]||0)+1;
+        });
         var src=last?last.source:'-';
+        var srcPort=last?last.source_port:'-';
         var trapName=last?last.trap_name:'-';
         var band=last?last.band:'-';
         var type=last?last.notification_type:'-';
         var comm=last?last.community:'-';
+        var lastLen=last?last.raw_len:0;
 
         document.getElementById('ampKPIs').innerHTML=
             '<div class="kpi cyan"><div class="kpi-label">Traps Recibidos</div><div class="kpi-value">'+formatNum(traps)+'</div></div>'+
-            '<div class="kpi green"><div class="kpi-label">Ultimo Origen</div><div class="kpi-value" style="font-size:1.1em">'+src+'</div></div>'+
-            '<div class="kpi purple"><div class="kpi-label">Ultimo Tipo</div><div class="kpi-value" style="font-size:1em">'+trapName+'</div></div>'+
-            '<div class="kpi yellow"><div class="kpi-label">Banda</div><div class="kpi-value" style="font-size:1.3em">'+band+'</div></div>';
+            '<div class="kpi green"><div class="kpi-label">Ultimo Origen</div><div class="kpi-value" style="font-size:1.1em">'+src+':'+srcPort+'</div></div>'+
+            '<div class="kpi purple"><div class="kpi-label">Ultimo Trap</div><div class="kpi-value" style="font-size:1em">'+trapName+'</div></div>'+
+            '<div class="kpi yellow"><div class="kpi-label">Banda</div><div class="kpi-value" style="font-size:1.3em">'+band+'</div></div>'+
+            '<div class="kpi cyan"><div class="kpi-label">Bytes Ultimo Trap</div><div class="kpi-value" style="font-size:1.2em">'+lastLen+'</div></div>';
+
+        var summary='<div class="panel"><div class="panel-header"><span class="panel-title">Resumen General</span></div><div class="table-wrap">';
+        summary+='<table><thead><tr><th>Campo</th><th>Valor</th></tr></thead><tbody>';
+        summary+='<tr><td>Traps Totales</td><td>'+traps+'</td></tr>';
+        summary+='<tr><td>Fuentes Unicas</td><td>'+Object.keys(bySource).length+'</td></tr>';
+        summary+='<tr><td>Tipos Unicos</td><td>'+Object.keys(byType).length+'</td></tr>';
+        summary+='<tr><td>Ultimo Origen</td><td>'+src+':'+srcPort+'</td></tr>';
+        summary+='<tr><td>Ultimo Trap OID</td><td>'+(last?last.trap_oid:'-')+'</td></tr>';
+        summary+='<tr><td>Ultima Comunidad</td><td>'+comm+'</td></tr>';
+        summary+='</tbody></table></div></div>';
+
+        summary+='<div class="panel"><div class="panel-header"><span class="panel-title">Tipos de Trap</span></div><div class="table-wrap">';
+        summary+='<table><thead><tr><th>Trap</th><th>Cantidad</th></tr></thead><tbody>';
+        Object.keys(byType).sort().forEach(function(k){
+            summary+='<tr><td><b>'+k+'</b></td><td>'+byType[k]+'</td></tr>';
+        });
+        if(!Object.keys(byType).length) summary+='<tr><td colspan="2">Sin traps recibidos aun</td></tr>';
+        summary+='</tbody></table></div></div>';
 
         var html='<table><thead><tr><th>Timestamp</th><th>Origen</th><th>Trap</th><th>Tipo</th><th>Banda</th><th>Comunidad</th><th>Varbinds</th></tr></thead><tbody>';
         if(!events.length){
@@ -818,32 +845,38 @@ function renderAmplificador(){
             events.slice(0,50).forEach(function(e){
                 html+='<tr>'+
                     '<td>'+e.timestamp+'</td>'+
-                    '<td><b>'+e.source+'</b></td>'+
+                    '<td><b>'+e.source+':'+(e.source_port||'-')+'</b></td>'+
                     '<td>'+e.trap_name+'</td>'+
                     '<td>'+e.notification_type+'</td>'+
                     '<td>'+e.band+'</td>'+
                     '<td>'+e.community+'</td>'+
-                    '<td>'+((e.varbinds||[]).length)+'</td>'+
+                    '<td>'+((e.varbinds||[]).length)+'<br><span style="color:var(--sub);font-size:.75em">'+(e.raw_len||0)+' B</span></td>'+
                 '</tr>';
             });
         }
         html+='</tbody></table>';
         document.getElementById('ampTable').innerHTML=html;
 
-        var detail='<table><thead><tr><th>Campo</th><th>Valor</th></tr></thead><tbody>';
+        var detail=summary;
+        detail+='<div class="panel"><div class="panel-header"><span class="panel-title">Ultimo Trap Completo</span></div><div class="table-wrap">';
+        detail+='<table><thead><tr><th>Campo</th><th>Valor</th></tr></thead><tbody>';
         if(!last){
             detail+='<tr><td colspan="2">Sin traps recibidos aun</td></tr>';
         }else{
             detail+='<tr><td>Timestamp</td><td>'+last.timestamp+'</td></tr>';
-            detail+='<tr><td>Origen</td><td>'+last.source+'</td></tr>';
+            detail+='<tr><td>Origen</td><td>'+last.source+':'+(last.source_port||'-')+'</td></tr>';
+            detail+='<tr><td>Version</td><td>'+last.version+'</td></tr>';
             detail+='<tr><td>Comunidad</td><td>'+last.community+'</td></tr>';
             detail+='<tr><td>Trap OID</td><td>'+last.trap_oid+'</td></tr>';
             detail+='<tr><td>Trap</td><td>'+last.trap_name+'</td></tr>';
             detail+='<tr><td>Tipo</td><td>'+last.notification_type+'</td></tr>';
             detail+='<tr><td>Banda</td><td>'+last.band+'</td></tr>';
+            detail+='<tr><td>Raw len</td><td>'+(last.raw_len||0)+' bytes</td></tr>';
             detail+='<tr><td>Varbinds</td><td><pre style="white-space:pre-wrap;margin:0;color:var(--sub)">'+JSON.stringify(last.varbinds||[],null,2)+'</pre></td></tr>';
+            detail+='<tr><td>Raw hex</td><td><pre style="white-space:pre-wrap;margin:0;color:var(--sub)">'+(last.raw_hex||'')+'</pre></td></tr>';
         }
         detail+='</tbody></table>';
+        detail+='</div></div>';
         document.getElementById('ampDetail').innerHTML=detail;
     }).catch(function(){
         document.getElementById('ampKPIs').innerHTML=
