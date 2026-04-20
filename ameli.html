@@ -156,6 +156,7 @@ tr:hover td{background:rgba(0,212,255,.05)}
     <button class="tab" id="tabSesiones">Sesiones</button>
     <button class="tab" id="tabFortigate">FortiGate</button>
     <button class="tab" id="tabWifi">WiFi</button>
+    <button class="tab" id="tabAmp">Amplificador Movil</button>
     <button class="tab" id="tabVdom">VDOMs</button>
     <button class="tab" id="tabFirewall">Firewall Data</button>
     <button class="tab" id="tabBw">Bandwidth</button>
@@ -237,6 +238,17 @@ tr:hover td{background:rgba(0,212,255,.05)}
             <div class="table-wrap" id="wifiSsidTable"><div class="loading">CARGANDO</div></div>
         </div>
     </div>
+    <div class="view" id="ampView">
+        <div class="kpi-grid" id="ampKPIs"></div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Traps SNMP Recientes</span></div>
+            <div class="table-wrap" id="ampTable"><div class="loading">CARGANDO</div></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Detalle del Ultimo Trap</span></div>
+            <div class="table-wrap" id="ampDetail"><div class="loading">CARGANDO</div></div>
+        </div>
+    </div>
     <div class="view" id="vdomView">
         <div class="vdom-selector" id="vdomSelector"></div>
         <div class="vdom-counts" id="vdomCounts"></div>
@@ -286,6 +298,7 @@ document.getElementById('tabResumen').onclick=function(){switchView('resumen')};
 document.getElementById('tabSesiones').onclick=function(){switchView('sesiones')};
 document.getElementById('tabFortigate').onclick=function(){switchView('fortigate')};
 document.getElementById('tabWifi').onclick=function(){switchView('wifi')};
+document.getElementById('tabAmp').onclick=function(){switchView('amp')};
 document.getElementById('tabVdom').onclick=function(){switchView('vdom')};
 document.getElementById('tabFirewall').onclick=function(){switchView('firewall')};
 document.getElementById('tabBw').onclick=function(){switchView('bw')};
@@ -309,6 +322,7 @@ function loadData(){
         renderFortiGate();
         renderVPN();
         renderWifi();
+        renderAmplificador();
         renderVDOMs();
         renderFirewall();
         renderBandwidth();
@@ -327,7 +341,7 @@ function switchView(view){
     document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
     document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active')});
     document.getElementById(view+'View').classList.add('active');
-    var tabMap={'resumen':'tabResumen','sesiones':'tabSesiones','fortigate':'tabFortigate','wifi':'tabWifi','vdom':'tabVdom','firewall':'tabFirewall'};
+    var tabMap={'resumen':'tabResumen','sesiones':'tabSesiones','fortigate':'tabFortigate','wifi':'tabWifi','amp':'tabAmp','vdom':'tabVdom','firewall':'tabFirewall'};
     if(tabMap[view])document.getElementById(tabMap[view]).classList.add('active');
 }
 function renderResumen(){
@@ -776,6 +790,68 @@ function renderWifi(){
     }
     ssidHtml+='</tbody></table>';
     document.getElementById('wifiSsidTable').innerHTML=ssidHtml;
+}
+function renderAmplificador(){
+    fetch('multiboost_snmp.json?ts='+Date.now(),{cache:'no-store'}).then(function(r){
+        if(!r.ok) throw new Error('no data');
+        return r.json();
+    }).then(function(d){
+        var events=d.events||[];
+        var last=events[0]||null;
+        var traps=events.length;
+        var src=last?last.source:'-';
+        var trapName=last?last.trap_name:'-';
+        var band=last?last.band:'-';
+        var type=last?last.notification_type:'-';
+        var comm=last?last.community:'-';
+
+        document.getElementById('ampKPIs').innerHTML=
+            '<div class="kpi cyan"><div class="kpi-label">Traps Recibidos</div><div class="kpi-value">'+formatNum(traps)+'</div></div>'+
+            '<div class="kpi green"><div class="kpi-label">Ultimo Origen</div><div class="kpi-value" style="font-size:1.1em">'+src+'</div></div>'+
+            '<div class="kpi purple"><div class="kpi-label">Ultimo Tipo</div><div class="kpi-value" style="font-size:1em">'+trapName+'</div></div>'+
+            '<div class="kpi yellow"><div class="kpi-label">Banda</div><div class="kpi-value" style="font-size:1.3em">'+band+'</div></div>';
+
+        var html='<table><thead><tr><th>Timestamp</th><th>Origen</th><th>Trap</th><th>Tipo</th><th>Banda</th><th>Comunidad</th><th>Varbinds</th></tr></thead><tbody>';
+        if(!events.length){
+            html+='<tr><td colspan="7">Esperando traps SNMP del amplificador movil</td></tr>';
+        }else{
+            events.slice(0,50).forEach(function(e){
+                html+='<tr>'+
+                    '<td>'+e.timestamp+'</td>'+
+                    '<td><b>'+e.source+'</b></td>'+
+                    '<td>'+e.trap_name+'</td>'+
+                    '<td>'+e.notification_type+'</td>'+
+                    '<td>'+e.band+'</td>'+
+                    '<td>'+e.community+'</td>'+
+                    '<td>'+((e.varbinds||[]).length)+'</td>'+
+                '</tr>';
+            });
+        }
+        html+='</tbody></table>';
+        document.getElementById('ampTable').innerHTML=html;
+
+        var detail='<table><thead><tr><th>Campo</th><th>Valor</th></tr></thead><tbody>';
+        if(!last){
+            detail+='<tr><td colspan="2">Sin traps recibidos aun</td></tr>';
+        }else{
+            detail+='<tr><td>Timestamp</td><td>'+last.timestamp+'</td></tr>';
+            detail+='<tr><td>Origen</td><td>'+last.source+'</td></tr>';
+            detail+='<tr><td>Comunidad</td><td>'+last.community+'</td></tr>';
+            detail+='<tr><td>Trap OID</td><td>'+last.trap_oid+'</td></tr>';
+            detail+='<tr><td>Trap</td><td>'+last.trap_name+'</td></tr>';
+            detail+='<tr><td>Tipo</td><td>'+last.notification_type+'</td></tr>';
+            detail+='<tr><td>Banda</td><td>'+last.band+'</td></tr>';
+            detail+='<tr><td>Varbinds</td><td><pre style="white-space:pre-wrap;margin:0;color:var(--sub)">'+JSON.stringify(last.varbinds||[],null,2)+'</pre></td></tr>';
+        }
+        detail+='</tbody></table>';
+        document.getElementById('ampDetail').innerHTML=detail;
+    }).catch(function(){
+        document.getElementById('ampKPIs').innerHTML=
+            '<div class="kpi cyan"><div class="kpi-label">Traps Recibidos</div><div class="kpi-value">0</div></div>'+
+            '<div class="kpi green"><div class="kpi-label">Estado</div><div class="kpi-value" style="font-size:1.1em">Esperando SNMP</div></div>';
+        document.getElementById('ampTable').innerHTML='<div class="loading">Esperando traps SNMP del amplificador movil</div>';
+        document.getElementById('ampDetail').innerHTML='<div class="loading">Sin informacion</div>';
+    });
 }
 function formatBytes(b){if(!b)return'0 B';var e=Math.floor(Math.log(b)/Math.log(1024));return(b/Math.pow(1024,e)).toFixed(1)+' '+['B','KB','MB','GB'][e];}
 function renderFirewall(){

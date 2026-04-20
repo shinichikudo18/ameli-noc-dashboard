@@ -1,0 +1,83 @@
+MULTIBOOST-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+    MODULE-IDENTITY, NOTIFICATION-TYPE, OBJECT-TYPE, SnmpAdminString, Integer32, enterprises FROM SNMPv2-SMI;
+
+MultiboostEU MODULE-IDENTITY
+    LAST-UPDATED "20250121"
+    ORGANIZATION "Multiboost.eu"
+    CONTACT-INFO    
+	 "postal:   MULTIBOOST
+		    Frankrijklaan 27
+                    8970 Poperinge Belgium
+          email:    info@Multiboost.eu"
+    DESCRIPTION
+	"Multiboost MIB"
+    REVISION     "2"
+    DESCRIPTION
+	"Multiboost MIB"
+    ::= { enterprises 45401 }
+
+Multiboost    	OBJECT IDENTIFIER ::= {MultiboostEU 2}
+
+-- Multiboost-specific OIDs
+MultiboostNotifications OBJECT IDENTIFIER ::= { Multiboost 0 }
+-- MultiboostSystemInfo OBJECT IDENTIFIER ::= { Multiboost 1 }
+
+MultiboostNotificationPrefix OBJECT IDENTIFIER ::= { MultiboostNotifications 0 }
+MultiboostNotificationObjects OBJECT IDENTIFIER ::= { MultiboostNotifications 1 }
+
+-- Notifications
+MultiboostInitializedNotification        NOTIFICATION-TYPE
+--  OBJECTS     { MultiboostNotificationType }
+    STATUS	current
+    DESCRIPTION
+	"The Multiboost device has initialized"
+    ::= { MultiboostNotificationPrefix 1 }
+
+MultiboostMultipleOscillationNotification        NOTIFICATION-TYPE
+--  OBJECTS     { MultiboostNotificationType }
+    STATUS	current
+    DESCRIPTION
+	"Multiple oscilations detected"
+    ::= { MultiboostNotificationPrefix 2 }
+
+MultiboostBadIsolationNotification        NOTIFICATION-TYPE
+--  OBJECTS     { MultiboostNotificationType }
+    STATUS	current
+    DESCRIPTION
+	"Bad isolation detected"
+    ::= { MultiboostNotificationPrefix 3 }
+
+MultiboostNewFirmwareNotification        NOTIFICATION-TYPE
+--  OBJECTS     { MultiboostNotificationType }
+    STATUS	current
+    DESCRIPTION
+	"New firmware available"
+    ::= { MultiboostNotificationPrefix 4 }
+
+MultiboostNewChannelListNotification        NOTIFICATION-TYPE
+--  OBJECTS     { MultiboostNotificationType }
+    STATUS	current
+    DESCRIPTION
+	"New channel list available"
+    ::= { MultiboostNotificationPrefix 5 }
+
+-- Notification objects
+MultiboostNotificationType OBJECT-TYPE
+    SYNTAX      SnmpAdminString
+    MAX-ACCESS  accessible-for-notify
+    STATUS      current
+    DESCRIPTION
+        "Device name string object"
+::= { MultiboostNotificationObjects 1 }
+
+MultiboostNotificationBand OBJECT-TYPE
+    SYNTAX      SnmpAdminString
+    MAX-ACCESS  accessible-for-notify
+    STATUS      current
+    DESCRIPTION
+        "Band affected"
+::= { MultiboostNotificationObjects 2 }
+
+END
